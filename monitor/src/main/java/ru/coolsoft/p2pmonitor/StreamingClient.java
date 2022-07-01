@@ -1,6 +1,5 @@
 package ru.coolsoft.p2pmonitor;
 
-import static ru.coolsoft.common.Protocol.END_OF_STREAM;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
 import static ru.coolsoft.common.StreamId.CONTROL;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CLOSING;
@@ -21,6 +20,7 @@ import java.net.UnknownHostException;
 
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Defaults;
+import ru.coolsoft.common.Protocol;
 import ru.coolsoft.common.StreamId;
 
 public class StreamingClient extends Thread {
@@ -86,9 +86,7 @@ public class StreamingClient extends Thread {
                 switch (StreamId.byId(streamId)) {
                     case CONTROL:
                         Command cmd = Command.byId(in.read());
-                        int len = in.read();
-                        byte[] data = new byte[len];
-                        readAllBytes(data);
+                        byte[] data = Protocol.readData(in);
                         eventListener.onCommand(cmd, data);
                         break;
                     case END_OF_STREAM:
@@ -106,34 +104,19 @@ public class StreamingClient extends Thread {
     }
 
     public void terminate() {
-        if (socket != null) {
-            try {
+        try {
+            if (socket != null) {
                 socket.close();
                 socket = null;
+            }
+            if (handlerThread != null) {
                 handlerThread.quitSafely();
                 handlerThread = null;
-            } catch (IOException e) {
-                eventListener.onError(CLOSING, e);
             }
-        }
-        eventListener.onDisconnected(); //ToDo: cleanup in listener
-    }
-
-    private void readAllBytes(byte[] buffer) {
-        int remainder = buffer.length;
-        int acquired = 0;
-        try {
-            do {
-                int read = in.read(buffer, acquired, remainder);
-                if (read == END_OF_STREAM) {
-                    break;
-                }
-                acquired += read;
-                remainder -= read;
-            } while (remainder > 0);
         } catch (IOException e) {
-            e.printStackTrace();
+            eventListener.onError(CLOSING, e);
         }
+        eventListener.onDisconnected();
     }
 
     public interface EventListener {

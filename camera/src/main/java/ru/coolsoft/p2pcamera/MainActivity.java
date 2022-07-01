@@ -7,6 +7,7 @@ import static android.hardware.camera2.CameraMetadata.FLASH_MODE_OFF;
 import static android.hardware.camera2.CameraMetadata.FLASH_MODE_TORCH;
 import static android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE;
 import static android.hardware.camera2.CaptureRequest.FLASH_MODE;
+import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
 
 import android.Manifest;
 import android.content.Context;
@@ -75,26 +76,6 @@ public class MainActivity extends AppCompatActivity {
     private StreamingServer streamingServer = null;
     private final List<ClientInfo> clients = new ArrayList<>();
 
-    private final CameraManager.TorchCallback torchCallback;
-
-    {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            torchCallback = new CameraManager.TorchCallback() {
-                @Override
-                public void onTorchModeUnavailable(@NonNull String cameraId) {
-                    onTorchUnavailable();
-                }
-
-                @Override
-                public void onTorchModeChanged(@NonNull String cameraId, boolean enabled) {
-                    MainActivity.this.onTorchModeChanged(enabled);
-                }
-            };
-        } else {
-            torchCallback = null;
-        }
-    }
-
     private void onTorchUnavailable() {
         torchAvailable = false;
         streamingServer.notifyClients(Command.FLASHLIGHT, new byte[]{(byte) Flashlight.UNAVAILABLE.getModeId()});
@@ -125,21 +106,9 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onToggleFlashlight() {
-            try {
-                if (torchAvailable) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        mCameraManager.setTorchMode(mCameras[DEFAULT_CAMERA_IDX].mCameraID, !torchMode);
-                    } else {
-                        mCameras[DEFAULT_CAMERA_IDX].setFlashMode(!torchMode);
-                        onTorchModeChanged(!torchMode);
-                    }
-                }
-
-            } catch (CameraAccessException e) {
-                //ToDo: report error to the client
-                // - add client identity to the method signature
-                // - add notification Stream ID
-                e.printStackTrace();
+            if (torchAvailable) {
+                mCameras[DEFAULT_CAMERA_IDX].setFlashMode(!torchMode);
+                onTorchModeChanged(!torchMode);
             }
         }
 
@@ -181,16 +150,12 @@ public class MainActivity extends AppCompatActivity {
         streamingServer.start();
 
         mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            mCameraManager.registerTorchCallback(torchCallback, mBackgroundHandler);
-        } else {
-            try {
-                if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
-                    onTorchUnavailable();
-                }
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
+        try {
+            if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
+                onTorchUnavailable();
             }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
         }
 
         try {
@@ -215,9 +180,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            mCameraManager.unregisterTorchCallback(torchCallback);
-        }
         streamingServer.stopServer();
         super.onDestroy();
     }
@@ -251,7 +213,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void setUpMediaCodec() {
         try {
-            mCodec = MediaCodec.createEncoderByType("video/avc"); // H264 кодек
+            mCodec = MediaCodec.createEncoderByType(MIMETYPE_VIDEO_AVC); // H264 кодек
 
         } catch (Exception e) {
             Log.i(LOG_TAG, "а нету кодека");
@@ -264,7 +226,7 @@ public class MainActivity extends AppCompatActivity {
         int videoFramePerSecond = 20; // FPS
         int iframeInterval = 3; // I-Frame интервал в секундах
 
-        MediaFormat format = MediaFormat.createVideoFormat("video/avc", width, height);
+        MediaFormat format = MediaFormat.createVideoFormat(MIMETYPE_VIDEO_AVC, width, height);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
         format.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, videoFramePerSecond);

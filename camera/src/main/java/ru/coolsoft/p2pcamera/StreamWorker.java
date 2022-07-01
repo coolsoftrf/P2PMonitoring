@@ -144,6 +144,9 @@ public class StreamWorker extends Thread {
                     workerListener.reportCaps(this);
                     break;
                 default:
+                    //ToDo: update protocol to include data len even if there's no data
+                    // - skip data block for unknown commands
+                    // - recognize END_OF_STREAM
                     listener.onError(this, UNKNOWN_COMMAND, cmd.aux);
                     break;
             }
