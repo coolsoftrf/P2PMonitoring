@@ -1,5 +1,10 @@
 package ru.coolsoft.p2pcamera;
 
+import static ru.coolsoft.common.Protocol.createSendRoutine;
+import static ru.coolsoft.common.StreamId.CONTROL;
+import static ru.coolsoft.common.StreamId.MEDIA;
+import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
+
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
@@ -13,11 +18,6 @@ import java.net.Socket;
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.StreamId;
 import ru.coolsoft.p2pcamera.StreamingServer.EventListener;
-
-import static ru.coolsoft.common.Protocol.createSendRoutine;
-import static ru.coolsoft.common.StreamId.CONTROL;
-import static ru.coolsoft.common.StreamId.MEDIA;
-import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
 
 public class StreamWorker extends Thread {
     private static final String LOG_TAG = StreamWorker.class.getSimpleName();
@@ -137,7 +137,7 @@ public class StreamWorker extends Thread {
             Command cmd = Command.byId(in.read());
             switch (cmd) {
                 case FLASHLIGHT:
-                    //ToDo: process desired state
+                    //ToDo: process explicit state
                     listener.onToggleFlashlight();
                     break;
                 case CAPS:

@@ -1,5 +1,13 @@
 package ru.coolsoft.p2pmonitor;
 
+import static ru.coolsoft.common.Protocol.END_OF_STREAM;
+import static ru.coolsoft.common.Protocol.createSendRoutine;
+import static ru.coolsoft.common.StreamId.CONTROL;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CLOSING;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.HOST_UNRESOLVED_ERROR;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.IO_INITIALIZATION_ERROR;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.SOCKET_INITIALIZATION_ERROR;
+
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
@@ -14,13 +22,6 @@ import java.net.UnknownHostException;
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Defaults;
 import ru.coolsoft.common.StreamId;
-
-import static ru.coolsoft.common.Protocol.createSendRoutine;
-import static ru.coolsoft.common.StreamId.CONTROL;
-import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CLOSING;
-import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.HOST_UNRESOLVED_ERROR;
-import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.IO_INITIALIZATION_ERROR;
-import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.SOCKET_INITIALIZATION_ERROR;
 
 public class StreamingClient extends Thread {
     private final EventListener eventListener;
@@ -39,7 +40,7 @@ public class StreamingClient extends Thread {
 
         handlerThread = new HandlerThread(StreamingClient.class.getSimpleName());
         handlerThread.start();
-        handler = new Handler(handlerThread.getLooper(), createSendRoutine(()->out));
+        handler = new Handler(handlerThread.getLooper(), createSendRoutine(() -> out));
     }
 
     public void sendCommand(Command command, byte[] data) {
@@ -90,7 +91,7 @@ public class StreamingClient extends Thread {
                         readAllBytes(data);
                         eventListener.onCommand(cmd, data);
                         break;
-                    case END_OF_STREAM: //Server disconnected
+                    case END_OF_STREAM:
                         running = false;
                         terminate();
                         break;
@@ -119,11 +120,17 @@ public class StreamingClient extends Thread {
     }
 
     private void readAllBytes(byte[] buffer) {
+        int remainder = buffer.length;
+        int acquired = 0;
         try {
-            //FixMe:
-            // - read ALL bytes
-            // - consider «-1» as EOF - here and elsewhere
-            in.read(buffer);
+            do {
+                int read = in.read(buffer, acquired, remainder);
+                if (read == END_OF_STREAM) {
+                    break;
+                }
+                acquired += read;
+                remainder -= read;
+            } while (remainder > 0);
         } catch (IOException e) {
             e.printStackTrace();
         }

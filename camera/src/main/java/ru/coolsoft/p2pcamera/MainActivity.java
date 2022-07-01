@@ -1,12 +1,18 @@
 package ru.coolsoft.p2pcamera;
 
+import static android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE;
+import static android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP;
+import static android.hardware.camera2.CameraMetadata.CONTROL_AE_MODE_ON;
+import static android.hardware.camera2.CameraMetadata.FLASH_MODE_OFF;
+import static android.hardware.camera2.CameraMetadata.FLASH_MODE_TORCH;
+import static android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE;
+import static android.hardware.camera2.CaptureRequest.FLASH_MODE;
+
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
-import android.hardware.Camera;
-import android.hardware.Camera.Parameters;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -46,18 +52,12 @@ import ru.coolsoft.common.Flashlight;
 import ru.coolsoft.p2pcamera.StreamingServer.EventListener;
 import ru.coolsoft.p2pcamera.databinding.ActivityMainBinding;
 
-import static android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP;
-
 public class MainActivity extends AppCompatActivity {
     public static final String LOG_TAG = "P2PCamera";
 
     private CameraManager mCameraManager = null;
     CameraService[] mCameras = null;
     private final int DEFAULT_CAMERA_IDX = 0;
-
-    //Build.VERSION_CODES.LOLLIPOP_MR1
-    private Camera mCamera1 = null;
-    private String torchEnabledValue;
 
     private boolean torchAvailable = true;
     private boolean torchMode = false;
@@ -130,9 +130,7 @@ public class MainActivity extends AppCompatActivity {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         mCameraManager.setTorchMode(mCameras[DEFAULT_CAMERA_IDX].mCameraID, !torchMode);
                     } else {
-                        Parameters camera1Params = getCamera1Params();
-                        camera1Params.setFlashMode(torchMode ? Parameters.FLASH_MODE_OFF : torchEnabledValue);
-                        mCamera1.setParameters(camera1Params);
+                        mCameras[DEFAULT_CAMERA_IDX].setFlashMode(!torchMode);
                         onTorchModeChanged(!torchMode);
                     }
                 }
@@ -182,21 +180,17 @@ public class MainActivity extends AppCompatActivity {
         streamingServer = new StreamingServer(eventListener);
         streamingServer.start();
 
-        //FixMe: on API22 camera2 preview doesn't work due to flash control over camera1
         mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             mCameraManager.registerTorchCallback(torchCallback, mBackgroundHandler);
         } else {
-            Parameters params = getCamera1Params();
-            List<String> flashModesList = params.getSupportedFlashModes();
-            if (flashModesList.contains(Parameters.FLASH_MODE_TORCH)) {
-                torchEnabledValue = Parameters.FLASH_MODE_TORCH;
-            } else if (flashModesList.contains(Parameters.FLASH_MODE_ON)) {
-                torchEnabledValue = Parameters.FLASH_MODE_ON;
-            } else {
-                onTorchUnavailable();
+            try {
+                if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
+                    onTorchUnavailable();
+                }
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
             }
-            torchMode = !params.getFlashMode().equals(Parameters.FLASH_MODE_OFF);
         }
 
         try {
@@ -219,13 +213,6 @@ public class MainActivity extends AppCompatActivity {
         setUpMediaCodec();
     }
 
-    private Parameters getCamera1Params() {
-        if (mCamera1 == null) {
-            mCamera1 = Camera.open();
-        }
-        return mCamera1.getParameters();
-    }
-
     @Override
     protected void onDestroy() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -246,13 +233,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onPause() {
         if (mCameras[DEFAULT_CAMERA_IDX].isOpen()) {
             mCameras[DEFAULT_CAMERA_IDX].closeCamera();
-        }
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            if (mCamera1 != null) {
-                mCamera1.release();
-                mCamera1 = null;
-            }
         }
 
         stopBackgroundThread();
@@ -322,8 +302,7 @@ public class MainActivity extends AppCompatActivity {
         private CameraCaptureSession mSession;
         private CaptureRequest.Builder mPreviewBuilder;
 
-        public CameraService(/*CameraManager cameraManager,*/ String cameraID) {
-//            mCameraManager = cameraManager;
+        public CameraService(String cameraID) {
             mCameraID = cameraID;
         }
 
@@ -433,6 +412,12 @@ public class MainActivity extends AppCompatActivity {
             return matrix;
         }
 
+        private void setFlashMode(boolean enabled) {
+            mPreviewBuilder.set(CONTROL_AE_MODE, CONTROL_AE_MODE_ON);
+            mPreviewBuilder.set(FLASH_MODE, enabled ? FLASH_MODE_TORCH : FLASH_MODE_OFF);
+            setRepeatingRequest();
+        }
+
         private void configureTexture() {
             CameraCharacteristics cameraCharacteristics;
             if (mCameraDevice == null) {
@@ -469,18 +454,21 @@ public class MainActivity extends AppCompatActivity {
                             @Override
                             public void onConfigured(CameraCaptureSession session) {
                                 mSession = session;
-
-                                try {
-                                    mSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);
-                                } catch (CameraAccessException e) {
-                                    e.printStackTrace();
-                                }
+                                setRepeatingRequest();
                             }
 
                             @Override
                             public void onConfigureFailed(CameraCaptureSession session) {
                             }
                         }, mBackgroundHandler);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void setRepeatingRequest() {
+            try {
+                mSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);
             } catch (CameraAccessException e) {
                 e.printStackTrace();
             }

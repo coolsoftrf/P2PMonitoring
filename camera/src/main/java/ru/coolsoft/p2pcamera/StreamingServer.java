@@ -1,5 +1,7 @@
 package ru.coolsoft.p2pcamera;
 
+import static ru.coolsoft.common.Defaults.SERVER_PORT;
+
 import android.util.Log;
 
 import java.io.IOException;
@@ -8,8 +10,6 @@ import java.net.Socket;
 import java.util.ArrayList;
 
 import ru.coolsoft.common.Command;
-
-import static ru.coolsoft.common.Defaults.SERVER_PORT;
 
 public class StreamingServer extends Thread {
     private final static String LOG_TAG = StreamingServer.class.getSimpleName();
@@ -30,8 +30,16 @@ public class StreamingServer extends Thread {
         public void reportCaps(StreamWorker worker) {
             listener.notifyTorchMode();
 
-            //ToDo: report other caps:
-            //  - cameras->resolutions mapping
+            //ToDo: report all caps:
+            //  cams:List<
+            //      caps:Map<
+            //          capability:[
+            //              Resolution, FlashAvailable, AF, MF, ...
+            //              (https://developer.android.com/reference/android/hardware/camera2/CameraCharacteristics#fields_1)
+            //          ],
+            //          value:Any
+            //      >
+            //  >
         }
     };
 

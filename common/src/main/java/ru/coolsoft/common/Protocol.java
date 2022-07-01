@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 public class Protocol {
+    public final static int END_OF_STREAM = -1;
+
     public static Handler.Callback createSendRoutine(Supplier<OutputStream> outputStreamSupplier) {
         return msg -> {
             try {
