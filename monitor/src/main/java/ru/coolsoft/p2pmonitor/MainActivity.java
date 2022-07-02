@@ -1,18 +1,42 @@
 package ru.coolsoft.p2pmonitor;
 
+import static android.media.MediaFormat.KEY_HEIGHT;
+import static android.media.MediaFormat.KEY_WIDTH;
+import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
+import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+import static ru.coolsoft.common.Constants.SIZEOF_INT;
+import static ru.coolsoft.common.Constants.SIZEOF_LONG;
+import static ru.coolsoft.common.Protocol.MEDIA_BUFFER_SIZE;
+
 import android.annotation.SuppressLint;
+import android.graphics.SurfaceTexture;
+import android.media.MediaCodec;
+import android.media.MediaFormat;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerThread;
+import android.util.Log;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Flashlight;
+import ru.coolsoft.common.Protocol;
 import ru.coolsoft.p2pmonitor.databinding.ActivityMainBinding;
 
 /**
@@ -25,8 +49,14 @@ public class MainActivity extends AppCompatActivity {
      * and a change of the status and navigation bar.
      */
     private static final int UI_ANIMATION_DELAY = 300;
+    private static final String LOG_TAG = "P2PMonitor";
     private final Handler mHideHandler = new Handler();
-    private View mContentView;
+    private TextureView mTextureView;
+
+    private MediaCodec mCodec = null;
+    private final ByteArrayOutputStream mediaStream = new ByteArrayOutputStream(MEDIA_BUFFER_SIZE);
+    private HandlerThread mCodecThread;
+    private Handler mCodecHandler;
 
     private final Runnable mHidePart2Runnable = new Runnable() {
         @SuppressLint("InlinedApi")
@@ -37,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
             // Note that some of these constants are new as of API 16 (Jelly Bean)
             // and API 19 (KitKat). It is safe to use them, as they are inlined
             // at compile-time and do nothing on earlier devices.
-            mContentView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LOW_PROFILE
+            mTextureView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LOW_PROFILE
                     | View.SYSTEM_UI_FLAG_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                     | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -64,7 +94,7 @@ public class MainActivity extends AppCompatActivity {
         }
     };
     private boolean mVisible;
-    private final Runnable mHideRunnable = this::hide;
+    private final Runnable mHideRunnable = this::hideConnectionControls;
 
     private EditText mAddressEdit;
     private StreamingClient client;
@@ -79,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onConnected() {
             runOnUiThread(() -> {
-                hide();
+                hideConnectionControls();
                 restoreConnectControls();
                 mCameraControls.setVisibility(View.VISIBLE);
                 client.sendCommand(Command.CAPS, null);
@@ -91,8 +121,42 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 mCameraControls.setVisibility(View.INVISIBLE);
                 client = null;
-                show();
+                stopCodec();
+                showConnectionControls();
             });
+        }
+
+        private void stopCodec() {
+            if (mCodec != null) {
+                mCodec.stop();
+                mCodec.reset();
+                mCodec.release();
+                mCodec = null;
+            }
+        }
+
+        @Override
+        public void onFormat(List<byte[]> csdBuffers) {
+            stopCodec();
+            startDecoder(csdBuffers);
+        }
+
+        @Override
+        public void onMedia(byte[] data) {
+            try {
+                ByteBuffer prefix = ByteBuffer.allocate(SIZEOF_LONG + SIZEOF_INT);
+                prefix.putLong(System.currentTimeMillis());
+                prefix.putInt(data.length);
+                synchronized (mediaStream) {
+                    mediaStream.write(prefix.array());
+                    mediaStream.write(data);
+                    mediaStream.notify();
+                    Log.v(LOG_TAG, String.format("written %d bytes of media", data.length));
+                }
+            } catch (IOException e) {
+                Log.e(LOG_TAG, "Media transfer to decoder failed", e);
+                e.printStackTrace();
+            }
         }
 
         @Override
@@ -131,6 +195,17 @@ public class MainActivity extends AppCompatActivity {
                         mFlashButton.setEnabled(mode != Flashlight.UNAVAILABLE);
                         mFlashButton.setText(txt);
                         break;
+                    case FORMAT:
+                        ByteBuffer buffer = ByteBuffer.wrap(data);
+                        List<byte[]> csdBuffers = new ArrayList<>();
+                        while (buffer.hasRemaining()) {
+                            int len = buffer.getInt();
+                            byte[] csd = new byte[len];
+                            buffer.get(csd);
+                            csdBuffers.add(csd);
+                        }
+                        onFormat(csdBuffers);
+                        break;
                     default:
                         Toast.makeText(MainActivity.this, getString(R.string.unknown_command, command.aux), Toast.LENGTH_SHORT).show();
                 }
@@ -166,16 +241,23 @@ public class MainActivity extends AppCompatActivity {
         mCameraControls = binding.cameraControls;
         mFlashButton = binding.flashButton;
 
-        mContentView = binding.fullscreenContent;
+        mTextureView = binding.fullscreenContent;
+        ((View) mTextureView.getParent()).addOnLayoutChangeListener(
+                (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                        updateTextureLayout(right - left, bottom - top));
 
         // Set up the user interaction to manually show or hide the system UI.
-        mContentView.setOnClickListener(view -> toggle());
+        mTextureView.setOnClickListener(view -> toggle());
     }
 
     @Override
     protected void onDestroy() {
         if (client != null) {
             client.terminate();
+        }
+        if (mCodecThread != null) {
+            mCodecThread.quitSafely();
+            mCodecThread = null;
         }
         super.onDestroy();
     }
@@ -190,15 +272,148 @@ public class MainActivity extends AppCompatActivity {
         delayedHide();
     }
 
-    private void toggle() {
-        if (mVisible) {
-            hide();
+    private void updateTextureLayout(int parentWidth, int parentHeight) {
+        float width, height;
+        if (mCodec != null) {
+            width = mCodec.getInputFormat().getInteger(KEY_WIDTH);
+            height = mCodec.getInputFormat().getInteger(KEY_HEIGHT);
         } else {
-            show();
+            width = mTextureView.getMeasuredWidth();
+            height = mTextureView.getMeasuredHeight();
+        }
+
+        ViewGroup.LayoutParams layoutParams = mTextureView.getLayoutParams();
+        if ((float) parentWidth / (float) parentHeight > width / height) {
+            layoutParams.height = MATCH_PARENT;
+            layoutParams.width = (int) (parentHeight / height * width);
+        } else {
+            layoutParams.width = MATCH_PARENT;
+            layoutParams.height = (int) (parentWidth / width * height);
+        }
+        mTextureView.setLayoutParams(layoutParams);
+    }
+
+    private final Handler.Callback processInput = msg -> {
+        byte[] b;
+        ByteBuffer inputBuffer = mCodec.getInputBuffer(msg.what);
+        inputBuffer.clear();
+        synchronized (mediaStream) {
+            while (mediaStream.size() == 0) {
+                try {
+                    mediaStream.wait();
+                } catch (InterruptedException e) {
+                    Log.e(LOG_TAG, "waiting on stream interrupted", e);
+                }
+            }
+            byte[] data = mediaStream.toByteArray();
+            ByteBuffer buffer = ByteBuffer.wrap(data);
+            long timestamp = buffer.getLong();
+            int len = buffer.getInt();
+
+            //skip obsolete frames if any
+            while (System.currentTimeMillis() - timestamp > Protocol.MAX_LATENCY_MS) {
+                //ToDo: implement latency hysteresis
+                // (e.g. cleanup frames till 50ms old one is found)
+                if (buffer.remaining() > len) {
+                    buffer.position(buffer.position() + len);
+                    timestamp = buffer.getLong();
+                    len = buffer.getInt();
+                } else {
+                    len = 0;
+                    break;
+                }
+            }
+
+            b = new byte[len];
+            buffer.get(b, 0, len);
+            mediaStream.reset();
+            if (buffer.hasRemaining()) {
+                mediaStream.write(data, buffer.position(), buffer.remaining());
+            }
+        }
+        inputBuffer.put(b);
+
+        Log.v(LOG_TAG, String.format("processing %d bytes of media to buffer #%d", b.length, msg.what));
+        mCodec.queueInputBuffer(msg.what, 0, b.length, 0, 0);
+        return true;
+    };
+
+    private synchronized void startDecoder(List<byte[]> csdBuffers) {
+        try {
+            mCodec = MediaCodec.createDecoderByType(MIMETYPE_VIDEO_AVC);
+        } catch (IOException e) {
+            Log.d(LOG_TAG, "Codec missing", e);
+            return;
+        }
+        mCodecThread = new HandlerThread("Decoder thread");
+        mCodecThread.start();
+        mCodecHandler = new Handler(mCodecThread.getLooper(), processInput);
+        prepareDecoder(csdBuffers);
+    }
+
+    private void prepareDecoder(List<byte[]> csdBuffers) {
+        if (mTextureView.isAvailable()) {
+            configureCodec(csdBuffers);
+        } else {
+            mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
+                    configureCodec(csdBuffers);
+                }
+
+                @Override
+                public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
+
+                }
+
+                @Override
+                public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
+                    return false;
+                }
+
+                @Override
+                public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
+
+                }
+            });
         }
     }
 
-    private void hide() {
+    private void configureCodec(List<byte[]> csdBuffers) {
+        int width = 640;
+        int height = 480;
+
+        MediaFormat format = MediaFormat.createVideoFormat(MIMETYPE_VIDEO_AVC, width, height);
+        for (int i = 0; i < csdBuffers.size(); i++) {
+            format.setByteBuffer("csd-" + i, ByteBuffer.wrap(csdBuffers.get(i)));
+        }
+        //format.setInteger(MediaFormat.KEY_ROTATION,90);//KEY_ROTATION requires API 23
+        //ToDo: add a UI control to rotate the texture
+
+        SurfaceTexture texture = mTextureView.getSurfaceTexture();
+        texture.setDefaultBufferSize(width, height);
+
+        Surface decoderSurface = new Surface(texture);
+        mCodec.configure(format, decoderSurface, null, 0);
+
+        //texture view isn't resized by MediaCodec, so do it manually
+        View textureParent = (View) (mTextureView.getParent());
+        updateTextureLayout(textureParent.getMeasuredWidth(), textureParent.getMeasuredHeight());
+
+        mCodec.setCallback(new DecoderCallback());
+        mCodec.start();
+        Log.i(LOG_TAG, "decoder started");
+    }
+
+    private void toggle() {
+        if (mVisible) {
+            hideConnectionControls();
+        } else {
+            showConnectionControls();
+        }
+    }
+
+    private void hideConnectionControls() {
         // Hide UI first
         ActionBar actionBar = getSupportActionBar();
         if (actionBar != null) {
@@ -214,9 +429,9 @@ public class MainActivity extends AppCompatActivity {
         mHideHandler.postDelayed(mHidePart2Runnable, UI_ANIMATION_DELAY);
     }
 
-    private void show() {
+    private void showConnectionControls() {
         // Show the system bar
-        mContentView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        mTextureView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         mVisible = true;
 
@@ -241,7 +456,7 @@ public class MainActivity extends AppCompatActivity {
             if (address.length() > 0) {
                 mConnectButton.setVisibility(View.GONE);
                 mConnectionProgress.setVisibility(View.VISIBLE);
-                client = new StreamingClient(address, /*getMainLooper(),*/ eventListener);
+                client = new StreamingClient(address, eventListener);
                 client.start();
             } else {
                 Toast.makeText(this, R.string.address_null, Toast.LENGTH_SHORT).show();
@@ -257,5 +472,28 @@ public class MainActivity extends AppCompatActivity {
 
     public void onDisconnectClicked(View view) {
         client.terminate();
+    }
+
+    private class DecoderCallback extends MediaCodec.Callback {
+        @Override
+        public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
+            mCodecHandler.sendEmptyMessage(index);
+        }
+
+        @Override
+        public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
+            codec.releaseOutputBuffer(index, true);
+            Log.v(LOG_TAG, "output buffer released to surface");
+        }
+
+        @Override
+        public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {
+            Log.e(LOG_TAG, "decoder error", e);
+        }
+
+        @Override
+        public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
+
+        }
     }
 }

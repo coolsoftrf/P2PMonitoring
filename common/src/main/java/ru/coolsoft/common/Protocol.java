@@ -1,5 +1,6 @@
 package ru.coolsoft.common;
 
+import static ru.coolsoft.common.Constants.SIZEOF_INT;
 import static ru.coolsoft.common.StreamId.CONTROL;
 
 import android.os.Handler;
@@ -11,6 +12,8 @@ import java.nio.ByteBuffer;
 
 public class Protocol {
     public final static int END_OF_STREAM = -1;
+    public final static int MEDIA_BUFFER_SIZE = 65536;
+    public final static int MAX_LATENCY_MS = 100;
 
     public static Handler.Callback createSendRoutine(Supplier<OutputStream> outputStreamSupplier) {
         return msg -> {
@@ -29,7 +32,7 @@ public class Protocol {
                     out.write(msg.arg2);
                 }
                 if (datalen > 0) {
-                    ByteBuffer buf = ByteBuffer.allocate(4);
+                    ByteBuffer buf = ByteBuffer.allocate(SIZEOF_INT);
                     buf.putInt(datalen);
                     out.write(buf.array());
                     out.write((byte[]) msg.obj);

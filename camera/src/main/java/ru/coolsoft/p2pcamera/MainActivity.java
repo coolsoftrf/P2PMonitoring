@@ -8,6 +8,8 @@ import static android.hardware.camera2.CameraMetadata.FLASH_MODE_TORCH;
 import static android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE;
 import static android.hardware.camera2.CaptureRequest.FLASH_MODE;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
+import static ru.coolsoft.common.Command.FORMAT;
+import static ru.coolsoft.common.Constants.SIZEOF_INT;
 
 import android.Manifest;
 import android.content.Context;
@@ -38,11 +40,13 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.InetAddress;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -66,9 +70,10 @@ public class MainActivity extends AppCompatActivity {
     private TextureView mTextureView = null;
     private TextView mInfoText = null;
 
-    private MediaCodec mCodec = null; // кодер
-    Surface mEncoderSurface; // Surface как вход данных для кодера
+    private MediaCodec mCodec = null;
+    Surface mEncoderSurface;
     public static Surface surface = null;
+    private final List<byte[]> csdBuffers = new ArrayList<>();
 
     private HandlerThread mBackgroundThread;
     private Handler mBackgroundHandler = null;
@@ -93,14 +98,19 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onClientConnected(Socket socket) {
-            clients.add(new ClientInfo(socket));
+        public void onClientConnected(StreamWorker worker) {
+            clients.add(new ClientInfo(worker));
             refreshClientCounter();
+
+            byte[] csdData = getCodecSpecificDataArray();
+            if (csdData != null) {
+                worker.notifyClient(FORMAT, csdData);
+            }
         }
 
         @Override
-        public void onClientDisconnected(Socket socket) {
-            clients.remove(new ClientInfo(socket));
+        public void onClientDisconnected(StreamWorker worker) {
+            clients.remove(new ClientInfo(worker));
             refreshClientCounter();
         }
 
@@ -129,6 +139,24 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     };
+
+    @Nullable
+    private byte[] getCodecSpecificDataArray() {
+        ByteArrayOutputStream csdData = new ByteArrayOutputStream();
+        ByteBuffer len = ByteBuffer.allocate(SIZEOF_INT);
+        try {
+            for (byte[] csd : csdBuffers) {
+                len.clear();
+                len.putInt(csd.length);
+                csdData.write(len.array());
+                csdData.write(csd);
+            }
+        } catch (IOException e) {
+            Log.e(LOG_TAG, "failed to prepare codec specific data (CSD)");
+            return null;
+        }
+        return csdData.toByteArray();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -159,14 +187,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         try {
-            // Получение списка камер с устройства
             mCameras = new CameraService[mCameraManager.getCameraIdList().length];
 
             for (String cameraID : mCameraManager.getCameraIdList()) {
                 Log.i(LOG_TAG, "cameraID: " + cameraID);
                 int id = Integer.parseInt(cameraID);
-                // создаем обработчик для камеры
-                mCameras[id] = new CameraService(/*mCameraManager,*/ cameraID);
+                mCameras[id] = new CameraService(cameraID);
 
             }
         } catch (CameraAccessException e) {
@@ -174,7 +200,6 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
 
-        // инициализируем Медиа Кодек
         setUpMediaCodec();
     }
 
@@ -206,25 +231,24 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         startBackgroundThread();
 
-        // открываем камеру
         if (mCameras[DEFAULT_CAMERA_IDX] != null && !mCameras[DEFAULT_CAMERA_IDX].isOpen())
             mCameras[DEFAULT_CAMERA_IDX].openCamera();
     }
 
     private void setUpMediaCodec() {
         try {
-            mCodec = MediaCodec.createEncoderByType(MIMETYPE_VIDEO_AVC); // H264 кодек
-
+            mCodec = MediaCodec.createEncoderByType(MIMETYPE_VIDEO_AVC); // H264
         } catch (Exception e) {
-            Log.i(LOG_TAG, "а нету кодека");
+            Log.i(LOG_TAG, "codec missing");
+            return;
         }
 
-        int width = 320; // ширина видео
-        int height = 240; // высота видео
-        int colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface; // формат ввода цвета
-        int videoBitrate = 500000; // битрейт видео в bps (бит в секунду)
-        int videoFramePerSecond = 20; // FPS
-        int iframeInterval = 3; // I-Frame интервал в секундах
+        int width = 320;
+        int height = 240;
+        int colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface;
+        int videoBitrate = 500000;
+        int videoFramePerSecond = 20;
+        int iframeInterval = 3;
 
         MediaFormat format = MediaFormat.createVideoFormat(MIMETYPE_VIDEO_AVC, width, height);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
@@ -232,12 +256,12 @@ public class MainActivity extends AppCompatActivity {
         format.setInteger(MediaFormat.KEY_FRAME_RATE, videoFramePerSecond);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iframeInterval);
 
-        mCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE); // конфигурируем кодек как кодер
-        mEncoderSurface = mCodec.createInputSurface(); // получаем Surface кодера
+        mCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+        mEncoderSurface = mCodec.createInputSurface();
 
         mCodec.setCallback(new EncoderCallback());
-        mCodec.start(); // запускаем кодер
-        Log.i(LOG_TAG, "запустили кодек");
+        mCodec.start();
+        Log.i(LOG_TAG, "encoder started");
     }
 
 
@@ -409,9 +433,9 @@ public class MainActivity extends AppCompatActivity {
             try {
                 mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
                 mPreviewBuilder.addTarget(surface);
-                //mPreviewBuilder.addTarget(mEncoderSurface);
+                mPreviewBuilder.addTarget(mEncoderSurface);
 
-                mCameraDevice.createCaptureSession(Arrays.asList(surface/*, mEncoderSurface*/),
+                mCameraDevice.createCaptureSession(Arrays.asList(surface, mEncoderSurface),
                         new CameraCaptureSession.StateCallback() {
                             @Override
                             public void onConfigured(CameraCaptureSession session) {
@@ -487,6 +511,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        //ToDo: call it somewhere
         public void stopStreamingVideo() {
             if (mCameraDevice != null & mCodec != null) {
                 try {
@@ -499,7 +524,7 @@ public class MainActivity extends AppCompatActivity {
                 mCodec.stop();
                 mCodec.release();
                 mEncoderSurface.release();
-                //closeCamera();
+                closeCamera();
             }
         }
     }
@@ -512,18 +537,13 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
-            ByteBuffer outByteBuffer = mCodec.getOutputBuffer(index);
-            byte[] outDate = new byte[info.size];
-            outByteBuffer.get(outDate);
-/*
-            try {
-                DatagramPacket packet = new DatagramPacket(outDate, outDate.length, address, port);
-                udpSocket.send(packet);
-            } catch (IOException e) {
-                Log.i(LOG_TAG, " не отправился UDP пакет");
-            }
-*/
-            mCodec.releaseOutputBuffer(index, false);
+            ByteBuffer outByteBuffer = codec.getOutputBuffer(index);
+            byte[] outData = new byte[info.size];
+            outByteBuffer.get(outData);
+
+            streamingServer.streamToClients(outData);
+
+            codec.releaseOutputBuffer(index, false);
         }
 
         @Override
@@ -534,6 +554,19 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
             Log.i(LOG_TAG, "encoder output format changed: " + format);
+            csdBuffers.clear();
+            for (String csdKey : new String[]{"csd-0", "csd-1", "csd-2"}) {
+                ByteBuffer buffer = format.getByteBuffer(csdKey);
+                if (buffer == null || !buffer.hasRemaining()) {
+                    break;
+                }
+                csdBuffers.add(buffer.array());
+            }
+
+            byte[] csdData = getCodecSpecificDataArray();
+            if(csdData!=null) {
+                streamingServer.notifyClients(FORMAT, csdData);
+            }
         }
     }
 
@@ -554,8 +587,8 @@ public class MainActivity extends AppCompatActivity {
             return address.hashCode();
         }
 
-        private ClientInfo(Socket socket) {
-            address = socket.getInetAddress();
+        private ClientInfo(StreamWorker worker) {
+            address = worker.getSocket().getInetAddress();
             connectedTimestamp = System.currentTimeMillis();
         }
     }

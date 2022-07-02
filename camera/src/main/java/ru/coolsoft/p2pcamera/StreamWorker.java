@@ -110,7 +110,7 @@ public class StreamWorker extends Thread {
             out = socket.getOutputStream();
 
             try {
-                listener.onClientConnected(socket);
+                listener.onClientConnected(this);
                 while (running) {
                     StreamId key = StreamId.byId(in.read());
                     switch (key) {

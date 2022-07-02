@@ -14,8 +14,8 @@ import ru.coolsoft.common.Command;
 public class StreamingServer extends Thread {
     private final static String LOG_TAG = StreamingServer.class.getSimpleName();
 
-    private boolean running = false; // флаг для проверки, запущен ли сервер
-    private ServerSocket serverSocket; // экземпляр класса ServerSocket
+    private boolean running = false;
+    private ServerSocket serverSocket;
     private final ArrayList<StreamWorker> streams = new ArrayList<>();
     private final EventListener listener;
 
@@ -23,7 +23,7 @@ public class StreamingServer extends Thread {
         @Override
         public void onClientDisconnected(StreamWorker worker) {
             streams.remove(worker);
-            listener.onClientDisconnected(worker.getSocket());
+            listener.onClientDisconnected(worker);
         }
 
         @Override
@@ -72,20 +72,21 @@ public class StreamingServer extends Thread {
         }
     }
 
-    public void streamToClients(/* clientId ... */) {
-
+    public void streamToClients(byte[] data/* clientId ... */) {
+        for (StreamWorker worker : streams) {
+            if (!worker.sendFrame(data)) {
+                listener.onError(worker, Situation.CLIENT_STREAMING_ERROR, null);
+            }
+        }
     }
 
     @Override
     public void run() {
         try {
-            // создаём серверный сокет, он будет прослушивать порт на наличие запросов
             serverSocket = new ServerSocket(SERVER_PORT);
             running = true;
 
             while (running) {
-                // запускаем бесконечный цикл, внутри которого сокет будет слушать соединения и обрабатывать их
-                // создаем клиентский сокет, метод accept() создаёт экземпляр Socket при новом подключении
                 Socket clientSocket = serverSocket.accept();
                 StreamWorker worker = new StreamWorker(clientSocket, workerListener, listener);
                 streams.add(worker);
@@ -97,9 +98,9 @@ public class StreamingServer extends Thread {
     }
 
     public interface EventListener {
-        void onClientConnected(Socket socket);
+        void onClientConnected(StreamWorker worker);
 
-        void onClientDisconnected(Socket socket);
+        void onClientDisconnected(StreamWorker worker);
 
         void onToggleFlashlight();
 
@@ -109,6 +110,7 @@ public class StreamingServer extends Thread {
     }
 
     public enum Situation {
+        CLIENT_STREAMING_ERROR,
         CLIENT_NOTIFICATION_ERROR,
         MALFORMED_COMMAND,
         UNKNOWN_COMMAND,

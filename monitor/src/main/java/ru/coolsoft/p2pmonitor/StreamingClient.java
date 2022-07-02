@@ -17,6 +17,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.List;
 
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Defaults;
@@ -32,7 +33,6 @@ public class StreamingClient extends Thread {
     private Socket socket;
     private InputStream in;
     private OutputStream out;
-    private boolean running = false;
 
     public StreamingClient(String address, EventListener listener) {
         serverAddress = address;
@@ -64,7 +64,6 @@ public class StreamingClient extends Thread {
 
         try {
             socket = new Socket(address, Defaults.SERVER_PORT);
-            running = true;
             eventListener.onConnected();
         } catch (IOException e) {
             eventListener.onError(SOCKET_INITIALIZATION_ERROR, e);
@@ -81,24 +80,27 @@ public class StreamingClient extends Thread {
         }
 
         try {
-            while (running) {
+            loop:
+            while (true) {
                 int streamId = in.read();
                 switch (StreamId.byId(streamId)) {
+                    case MEDIA:
+                        byte[] media = Protocol.readData(in);
+                        eventListener.onMedia(media);
+                        break;
                     case CONTROL:
                         Command cmd = Command.byId(in.read());
                         byte[] data = Protocol.readData(in);
                         eventListener.onCommand(cmd, data);
                         break;
                     case END_OF_STREAM:
-                        running = false;
                         terminate();
-                        break;
+                        break loop;
                     default:
                         throw new IllegalStateException("Unexpected value: " + Command.byId(streamId));
                 }
             }
         } catch (IOException e) {
-            running = false;
             terminate();
         }
     }
@@ -130,6 +132,10 @@ public class StreamingClient extends Thread {
         void onConnected();
 
         void onDisconnected();
+
+        void onFormat(List<byte[]> csdBuffers);
+
+        void onMedia(byte[] data);
 
         void onCommand(Command command, byte[] data);
 

@@ -3,6 +3,7 @@ package ru.coolsoft.common;
 public enum Command {
     FLASHLIGHT(0),
     CAPS(1),
+    FORMAT(2),
     UNDEFINED(-1);
 
     private final int id;
@@ -22,6 +23,8 @@ public enum Command {
                 return FLASHLIGHT;
             case 1:
                 return CAPS;
+            case 2:
+                return FORMAT;
             default:
                 //ToDo: fix thread unsafe approach
                 UNDEFINED.aux = id;
