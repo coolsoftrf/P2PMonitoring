@@ -6,14 +6,10 @@ public enum StreamId {
     END_OF_STREAM(Protocol.END_OF_STREAM),
     UNDEFINED(-256);
 
-    private final int id;
+    public final int id;
 
     StreamId(int streamId) {
         id = streamId;
-    }
-
-    public int getId() {
-        return id;
     }
 
     public static StreamId byId(int streamId){

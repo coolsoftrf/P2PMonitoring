@@ -12,10 +12,6 @@ public enum Flashlight {
         mode = modeId;
     }
 
-    public int getModeId() {
-        return mode;
-    }
-
     public static Flashlight getById(int id) {
         switch (id) {
             case 0:

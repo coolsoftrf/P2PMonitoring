@@ -45,8 +45,8 @@ public class StreamingClient extends Thread {
 
     public void sendCommand(Command command, byte[] data) {
         Message msg = new Message();
-        msg.arg1 = CONTROL.getId();
-        msg.arg2 = command.getId();
+        msg.arg1 = CONTROL.id;
+        msg.arg2 = command.id;
         msg.obj = data;
         handler.sendMessage(msg);
     }

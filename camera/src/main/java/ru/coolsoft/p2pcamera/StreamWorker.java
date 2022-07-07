@@ -81,11 +81,11 @@ public class StreamWorker extends Thread {
     }
 
     public boolean notifyClient(Command command, byte[] data) {
-        return sendData(data, CONTROL.getId(), command.getId());
+        return sendData(data, CONTROL.id, command.id);
     }
 
     public boolean sendFrame(byte[] buffer) {
-        return sendData(buffer, MEDIA.getId());
+        return sendData(buffer, MEDIA.id);
     }
 
     private boolean sendData(byte[] data, int... args) {

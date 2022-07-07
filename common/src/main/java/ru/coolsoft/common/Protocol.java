@@ -13,17 +13,16 @@ import java.nio.ByteBuffer;
 public class Protocol {
     public final static int END_OF_STREAM = -1;
     public final static int MEDIA_BUFFER_SIZE = 65536;
-    public final static int MAX_LATENCY_MS = 100;
 
     public static Handler.Callback createSendRoutine(Supplier<OutputStream> outputStreamSupplier) {
         return msg -> {
             try {
-                boolean isCommand = msg.arg1 == CONTROL.getId();
-                int datalen;
+                boolean isCommand = msg.arg1 == CONTROL.id;
+                int dataLen;
                 if (msg.obj != null) {
-                    datalen = ((byte[]) msg.obj).length;
+                    dataLen = ((byte[]) msg.obj).length;
                 } else {
-                    datalen = 0;
+                    dataLen = 0;
                 }
 
                 OutputStream out = outputStreamSupplier.get();
@@ -31,9 +30,9 @@ public class Protocol {
                 if (isCommand) {
                     out.write(msg.arg2);
                 }
-                if (datalen > 0) {
+                if (dataLen > 0) {
                     ByteBuffer buf = ByteBuffer.allocate(SIZEOF_INT);
-                    buf.putInt(datalen);
+                    buf.putInt(dataLen);
                     out.write(buf.array());
                     out.write((byte[]) msg.obj);
                 }

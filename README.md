@@ -13,12 +13,17 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [x] Client: media decoder
 - [x] Client: show decoded stream
 - [x] Protocol: flash management
-- [ ] Server: UPnP over NAT-PMP
-- [ ] Protocol: audio streaming
+- [ ] ~~Server: Port mapping over NAT-PMP~~ (doesn't work with my router)
+- [ ] Server: SSDP based port mapping over UPnP
 ## Phase #1 - «Stabilization»
+- [ ] Create app icons
+- [ ] Remaster enums via `@IntDef` or static `byte`->value maps
+- [ ] Create unit tests 
 - [ ] Client: control frame rotation
 - [ ] Protocol: capture (high-res) photo
-- [ ] Server: stop encoder when no clients are connected
+- [ ] Server: stop encoder when last client disconnects
+- [ ] Server: detection of connection drops/IP renewal
+- [ ] Server: periodic port mapping check and update
 ## Phase #2 - «Camera controls»
 - [ ] Server: collect map of cameras to their characteristics
 - [ ] Protocol: choose desired camera
@@ -33,3 +38,7 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 ## Phase #5 - «Scaling»
 - [ ] Server: work with several cameras to serve different sources to different clients independently
 - [ ] Server: per-camera client statistics
+---
+## Nice to have features
+- [ ] Protocol: audio streaming
+- [ ] Server: Choose IP address to bind to

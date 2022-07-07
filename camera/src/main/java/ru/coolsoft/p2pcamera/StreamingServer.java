@@ -17,18 +17,18 @@ public class StreamingServer extends Thread {
     private boolean running = false;
     private ServerSocket serverSocket;
     private final ArrayList<StreamWorker> streams = new ArrayList<>();
-    private final EventListener listener;
+    private final EventListener serverListener;
 
     private final StreamWorker.WorkerEventListener workerListener = new StreamWorker.WorkerEventListener() {
         @Override
         public void onClientDisconnected(StreamWorker worker) {
             streams.remove(worker);
-            listener.onClientDisconnected(worker);
+            serverListener.onClientDisconnected(worker);
         }
 
         @Override
         public void reportCaps(StreamWorker worker) {
-            listener.notifyTorchMode();
+            serverListener.notifyTorchMode();
 
             //ToDo: report all caps:
             //  cams:List<
@@ -45,7 +45,7 @@ public class StreamingServer extends Thread {
 
     public StreamingServer(EventListener eventListener) {
         super(StreamingServer.class.getSimpleName());
-        listener = eventListener;
+        serverListener = eventListener;
     }
 
     public void stopServer() {
@@ -67,7 +67,7 @@ public class StreamingServer extends Thread {
     public void notifyClients(Command command, byte[] data/* clientId ... */) {
         for (StreamWorker worker : streams) {
             if (!worker.notifyClient(command, data)) {
-                listener.onError(worker, Situation.CLIENT_NOTIFICATION_ERROR, null);
+                serverListener.onError(worker, Situation.CLIENT_NOTIFICATION_ERROR, null);
             }
         }
     }
@@ -75,7 +75,7 @@ public class StreamingServer extends Thread {
     public void streamToClients(byte[] data/* clientId ... */) {
         for (StreamWorker worker : streams) {
             if (!worker.sendFrame(data)) {
-                listener.onError(worker, Situation.CLIENT_STREAMING_ERROR, null);
+                serverListener.onError(worker, Situation.CLIENT_STREAMING_ERROR, null);
             }
         }
     }
@@ -88,7 +88,7 @@ public class StreamingServer extends Thread {
 
             while (running) {
                 Socket clientSocket = serverSocket.accept();
-                StreamWorker worker = new StreamWorker(clientSocket, workerListener, listener);
+                StreamWorker worker = new StreamWorker(clientSocket, workerListener, serverListener);
                 streams.add(worker);
                 worker.start();
             }
@@ -98,6 +98,7 @@ public class StreamingServer extends Thread {
     }
 
     public interface EventListener {
+
         void onClientConnected(StreamWorker worker);
 
         void onClientDisconnected(StreamWorker worker);

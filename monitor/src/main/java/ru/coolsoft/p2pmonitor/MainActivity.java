@@ -4,8 +4,6 @@ import static android.media.MediaFormat.KEY_HEIGHT;
 import static android.media.MediaFormat.KEY_WIDTH;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
-import static ru.coolsoft.common.Constants.SIZEOF_INT;
-import static ru.coolsoft.common.Constants.SIZEOF_LONG;
 import static ru.coolsoft.common.Protocol.MEDIA_BUFFER_SIZE;
 
 import android.annotation.SuppressLint;
@@ -14,7 +12,6 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
@@ -36,7 +33,6 @@ import java.util.List;
 
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Flashlight;
-import ru.coolsoft.common.Protocol;
 import ru.coolsoft.p2pmonitor.databinding.ActivityMainBinding;
 
 /**
@@ -55,8 +51,6 @@ public class MainActivity extends AppCompatActivity {
 
     private MediaCodec mCodec = null;
     private final ByteArrayOutputStream mediaStream = new ByteArrayOutputStream(MEDIA_BUFFER_SIZE);
-    private HandlerThread mCodecThread;
-    private Handler mCodecHandler;
 
     private final Runnable mHidePart2Runnable = new Runnable() {
         @SuppressLint("InlinedApi")
@@ -144,13 +138,8 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onMedia(byte[] data) {
             try {
-                ByteBuffer prefix = ByteBuffer.allocate(SIZEOF_LONG + SIZEOF_INT);
-                prefix.putLong(System.currentTimeMillis());
-                prefix.putInt(data.length);
                 synchronized (mediaStream) {
-                    mediaStream.write(prefix.array());
                     mediaStream.write(data);
-                    mediaStream.notify();
                     Log.v(LOG_TAG, String.format("written %d bytes of media", data.length));
                 }
             } catch (IOException e) {
@@ -255,10 +244,6 @@ public class MainActivity extends AppCompatActivity {
         if (client != null) {
             client.terminate();
         }
-        if (mCodecThread != null) {
-            mCodecThread.quitSafely();
-            mCodecThread = null;
-        }
         super.onDestroy();
     }
 
@@ -293,51 +278,6 @@ public class MainActivity extends AppCompatActivity {
         mTextureView.setLayoutParams(layoutParams);
     }
 
-    private final Handler.Callback processInput = msg -> {
-        byte[] b;
-        ByteBuffer inputBuffer = mCodec.getInputBuffer(msg.what);
-        inputBuffer.clear();
-        synchronized (mediaStream) {
-            while (mediaStream.size() == 0) {
-                try {
-                    mediaStream.wait();
-                } catch (InterruptedException e) {
-                    Log.e(LOG_TAG, "waiting on stream interrupted", e);
-                }
-            }
-            byte[] data = mediaStream.toByteArray();
-            ByteBuffer buffer = ByteBuffer.wrap(data);
-            long timestamp = buffer.getLong();
-            int len = buffer.getInt();
-
-            //skip obsolete frames if any
-            while (System.currentTimeMillis() - timestamp > Protocol.MAX_LATENCY_MS) {
-                //ToDo: implement latency hysteresis
-                // (e.g. cleanup frames till 50ms old one is found)
-                if (buffer.remaining() > len) {
-                    buffer.position(buffer.position() + len);
-                    timestamp = buffer.getLong();
-                    len = buffer.getInt();
-                } else {
-                    len = 0;
-                    break;
-                }
-            }
-
-            b = new byte[len];
-            buffer.get(b, 0, len);
-            mediaStream.reset();
-            if (buffer.hasRemaining()) {
-                mediaStream.write(data, buffer.position(), buffer.remaining());
-            }
-        }
-        inputBuffer.put(b);
-
-        Log.v(LOG_TAG, String.format("processing %d bytes of media to buffer #%d", b.length, msg.what));
-        mCodec.queueInputBuffer(msg.what, 0, b.length, 0, 0);
-        return true;
-    };
-
     private synchronized void startDecoder(List<byte[]> csdBuffers) {
         try {
             mCodec = MediaCodec.createDecoderByType(MIMETYPE_VIDEO_AVC);
@@ -345,9 +285,6 @@ public class MainActivity extends AppCompatActivity {
             Log.d(LOG_TAG, "Codec missing", e);
             return;
         }
-        mCodecThread = new HandlerThread("Decoder thread");
-        mCodecThread.start();
-        mCodecHandler = new Handler(mCodecThread.getLooper(), processInput);
         prepareDecoder(csdBuffers);
     }
 
@@ -387,7 +324,6 @@ public class MainActivity extends AppCompatActivity {
         for (int i = 0; i < csdBuffers.size(); i++) {
             format.setByteBuffer("csd-" + i, ByteBuffer.wrap(csdBuffers.get(i)));
         }
-        //format.setInteger(MediaFormat.KEY_ROTATION,90);//KEY_ROTATION requires API 23
         //ToDo: add a UI control to rotate the texture
 
         SurfaceTexture texture = mTextureView.getSurfaceTexture();
@@ -477,7 +413,17 @@ public class MainActivity extends AppCompatActivity {
     private class DecoderCallback extends MediaCodec.Callback {
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
-            mCodecHandler.sendEmptyMessage(index);
+            byte[] b;
+            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
+            inputBuffer.clear();
+            synchronized (mediaStream) {
+                b = mediaStream.toByteArray();
+                mediaStream.reset();
+            }
+            inputBuffer.put(b);
+
+            Log.v(LOG_TAG, String.format("processing %d bytes of media to buffer #%d", b.length, index));
+            mCodec.queueInputBuffer(index, 0, b.length, 0, 0);
         }
 
         @Override

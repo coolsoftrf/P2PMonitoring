@@ -6,15 +6,11 @@ public enum Command {
     FORMAT(2),
     UNDEFINED(-1);
 
-    private final int id;
+    public final int id;
     public int aux;
 
     Command(int commandId) {
         id = commandId;
-    }
-
-    public int getId() {
-        return id;
     }
 
     public static Command byId(int id) {
