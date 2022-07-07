@@ -58,7 +58,7 @@ import ru.coolsoft.p2pcamera.StreamingServer.EventListener;
 import ru.coolsoft.p2pcamera.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
-    public static final String LOG_TAG = "P2PCamera";
+    private static final String LOG_TAG = "P2PCamera";
 
     private CameraManager mCameraManager = null;
     CameraService[] mCameras = null;
@@ -83,7 +83,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void onTorchUnavailable() {
         torchAvailable = false;
-        streamingServer.notifyClients(Command.FLASHLIGHT, new byte[]{(byte) Flashlight.UNAVAILABLE.getModeId()});
+        streamingServer.notifyClients(Command.FLASHLIGHT, new byte[]{(byte) Flashlight.UNAVAILABLE.mode});
     }
 
     private void onTorchModeChanged(boolean enabled) {
@@ -125,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void notifyTorchMode() {
             streamingServer.notifyClients(Command.FLASHLIGHT,
-                    new byte[]{(byte) (torchMode ? Flashlight.ON : Flashlight.OFF).getModeId()});
+                    new byte[]{(byte) (torchMode ? Flashlight.ON : Flashlight.OFF).mode});
         }
 
         @Override
@@ -511,7 +511,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        //ToDo: call it somewhere
+        //ToDo: call it on last client disconnection
         public void stopStreamingVideo() {
             if (mCameraDevice != null & mCodec != null) {
                 try {
