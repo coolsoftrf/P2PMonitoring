@@ -1,15 +1,19 @@
 package ru.coolsoft.p2pcamera;
 
 import static ru.coolsoft.common.Defaults.SERVER_PORT;
+import static ru.coolsoft.p2pcamera.upnp.PmpServer.Protocol.TCP;
 
 import android.util.Log;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 
 import ru.coolsoft.common.Command;
+import ru.coolsoft.p2pcamera.upnp.PmpServer;
 
 public class StreamingServer extends Thread {
     private final static String LOG_TAG = StreamingServer.class.getSimpleName();
@@ -43,6 +47,9 @@ public class StreamingServer extends Thread {
         }
     };
 
+    private PmpServer pmpServer;
+    private InetAddress externalAddress;
+
     public StreamingServer(EventListener eventListener) {
         super(StreamingServer.class.getSimpleName());
         serverListener = eventListener;
@@ -57,6 +64,10 @@ public class StreamingServer extends Thread {
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+        if(pmpServer != null){
+            pmpServer.stopServer();
+            pmpServer = null;
         }
         for (StreamWorker worker : streams) {
             //FixMe: ConcurrentModificationException
@@ -83,6 +94,14 @@ public class StreamingServer extends Thread {
     @Override
     public void run() {
         try {
+            pmpServer = new PmpServer(/*InetAddress.getLocalHost(),*/ address -> {
+                externalAddress = address;
+                Log.i(LOG_TAG, MessageFormat.format("External address: {0}", externalAddress));
+                //ToDo: request actual forwarding
+            });
+            pmpServer.start();
+            pmpServer.requestPortForward(TCP, SERVER_PORT);
+
             serverSocket = new ServerSocket(SERVER_PORT);
             running = true;
 
