@@ -44,13 +44,19 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
+import org.bitlet.weupnp.GatewayDevice;
+import org.bitlet.weupnp.PortMappingEntry;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Flashlight;
@@ -69,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
 
     private TextureView mTextureView = null;
     private TextView mInfoText = null;
+    private TextView mExternalInfoText = null;
 
     private MediaCodec mCodec = null;
     Surface mEncoderSurface;
@@ -93,6 +100,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private final EventListener eventListener = new EventListener() {
+        @Override
+        public void onGatewaysDiscovered(Map<InetAddress, GatewayDevice> gateways) {
+            StringBuffer msg = new StringBuffer(MessageFormat.format("Discovered {0} gateways:", gateways.entrySet().size()));
+            for (Map.Entry<InetAddress, GatewayDevice> entry : gateways.entrySet()) {
+                msg.append(MessageFormat.format("\r\n@{0}: {1}", entry.getKey(), entry.getValue().getURLBase()));
+            }
+
+            Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show();
+        }
+
+        @Override
+        public void onMappingDone(InetSocketAddress info) {
+            runOnUiThread(() -> mExternalInfoText.setText(getString(R.string.mapping_info,
+                    info.getHostString(), info.getPort()
+            )));
+        }
+
+        @Override
+        public void onAlreadyMapped(PortMappingEntry entry) {
+            runOnUiThread(() -> mExternalInfoText.setText(getString(R.string.already_mapped_info,
+                    entry.getRemoteHost(), entry.getInternalPort(), entry.getInternalClient()
+            )));
+        }
+
+        @Override
+        public void onPortMappingServerError(PortMappingServer.Situation situation, @Nullable Throwable e) {
+            runOnUiThread(() -> mExternalInfoText.setText(getString(R.string.mapping_error,
+                    e == null ? "" : e.getClass().getSimpleName())));
+        }
+
         private void refreshClientCounter() {
             runOnUiThread(() -> mInfoText.setText(getString(R.string.client_count, clients.size())));
         }
@@ -166,6 +203,7 @@ public class MainActivity extends AppCompatActivity {
 
         mTextureView = binding.textureView;
         mInfoText = binding.infoText;
+        mExternalInfoText = binding.extenalInfoText;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
@@ -564,7 +602,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             byte[] csdData = getCodecSpecificDataArray();
-            if(csdData!=null) {
+            if (csdData != null) {
                 streamingServer.notifyClients(FORMAT, csdData);
             }
         }

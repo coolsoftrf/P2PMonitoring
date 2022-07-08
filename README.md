@@ -14,16 +14,18 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [x] Client: show decoded stream
 - [x] Protocol: flash management
 - [ ] ~~Server: Port mapping over NAT-PMP~~ (doesn't work with my router)
-- [ ] Server: SSDP based port mapping over UPnP
+- [x] Server: SSDP based port mapping over UPnP
 ## Phase #1 - «Stabilization»
 - [ ] Create app icons
 - [ ] Remaster enums via `@IntDef` or static `byte`->value maps
+- [ ] Refactor `Message` acquisition via `obtain()`
 - [ ] Create unit tests 
 - [ ] Client: control frame rotation
 - [ ] Protocol: capture (high-res) photo
 - [ ] Server: stop encoder when last client disconnects
-- [ ] Server: detection of connection drops/IP renewal
-- [ ] Server: periodic port mapping check and update
+- [ ] Server: detection of connection drops/switchovers/IP renewals etc.
+- [ ] Server: periodic port mapping check and refresh
+- [ ] Fix image freezes 
 ## Phase #2 - «Camera controls»
 - [ ] Server: collect map of cameras to their characteristics
 - [ ] Protocol: choose desired camera
@@ -40,5 +42,7 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [ ] Server: per-camera client statistics
 ---
 ## Nice to have features
+- [ ] Wrap servers into Android services
 - [ ] Protocol: audio streaming
-- [ ] Server: Choose IP address to bind to
+- [ ] Server: choose interface (IP address) to bind to
+- [ ] Server: choose gateway (external IP address) to forward from 

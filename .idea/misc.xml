@@ -3,7 +3,8 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
-        <entry key="..\:/Users/vlni0117/AndroidStudioProjects/P2PMonitoring/monitor/src/main/res/layout/activity_main.xml" value="0.18115942028985507" />
+        <entry key="..\:$PROJECT_DIR$/camera/src/main/res/layout/activity_main.xml" value="0.18802083333333333" />
+        <entry key="..\:$PROJECT_DIR$/monitor/src/main/res/layout/activity_main.xml" value="0.18115942028985507" />
       </map>
     </option>
   </component>
