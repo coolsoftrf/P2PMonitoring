@@ -10,6 +10,7 @@ import static android.hardware.camera2.CaptureRequest.FLASH_MODE;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
 import static ru.coolsoft.common.Command.FORMAT;
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
+import static ru.coolsoft.common.Constants.SIZEOF_LONG;
 
 import android.Manifest;
 import android.content.Context;
@@ -170,6 +171,9 @@ public class MainActivity extends AppCompatActivity {
             switch (situation) {
                 case UNKNOWN_COMMAND:
                     Toast.makeText(MainActivity.this, getString(R.string.unknown_command, (Integer) details), Toast.LENGTH_SHORT).show();
+                    break;
+                case MALFORMED_COMMAND:
+                    Toast.makeText(MainActivity.this, getString(R.string.malformed_command, (Command) details), Toast.LENGTH_SHORT).show();
                     break;
                 default:
                     Toast.makeText(MainActivity.this, R.string.unknown_error, Toast.LENGTH_SHORT).show();
@@ -576,8 +580,12 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
             ByteBuffer outByteBuffer = codec.getOutputBuffer(index);
-            byte[] outData = new byte[info.size];
-            outByteBuffer.get(outData);
+            long now = System.currentTimeMillis();
+            byte[] outData = new byte[SIZEOF_LONG + info.size];
+            ByteBuffer outDataBuffer = ByteBuffer.wrap(outData);
+
+            outDataBuffer.putLong(now);
+            outDataBuffer.put(outByteBuffer);
 
             streamingServer.streamToClients(outData);
 

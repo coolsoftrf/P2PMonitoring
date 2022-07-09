@@ -19,6 +19,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -28,7 +29,10 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import ru.coolsoft.common.Command;
@@ -39,13 +43,26 @@ import ru.coolsoft.p2pmonitor.databinding.ActivityMainBinding;
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
  */
+@SuppressLint("SimpleDateFormat")
 public class MainActivity extends AppCompatActivity {
     /**
-     * Some older devices needs a small delay between UI widget updates
+     * Some older devices need a small delay between UI widget updates
      * and a change of the status and navigation bar.
      */
     private static final int UI_ANIMATION_DELAY = 300;
     private static final String LOG_TAG = "P2PMonitor";
+    private final DateFormat datetimeFormat;
+
+    {
+        DateFormat format = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.LONG);
+        if (format instanceof SimpleDateFormat) {
+            String pattern = ((SimpleDateFormat) format).toLocalizedPattern();
+            datetimeFormat = new SimpleDateFormat(pattern.replace("ss", "ss.SSS"));
+        } else {
+            datetimeFormat = format;
+        }
+    }
+
     private final Handler mHideHandler = new Handler();
     private TextureView mTextureView;
 
@@ -74,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
     private View mConnectionProgress;
     private View mCameraControls;
     private Button mFlashButton;
+    private TextView mTimestamp;
     private final Runnable mShowPart2Runnable = new Runnable() {
         @Override
         public void run() {
@@ -93,6 +111,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText mAddressEdit;
     private StreamingClient client;
     private final StreamingClient.EventListener eventListener = new StreamingClient.EventListener() {
+
         private void restoreConnectControls() {
             runOnUiThread(() -> {
                 mConnectButton.setVisibility(View.VISIBLE);
@@ -137,14 +156,12 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onMedia(byte[] data) {
-            try {
-                synchronized (mediaStream) {
-                    mediaStream.write(data);
-                    Log.v(LOG_TAG, String.format("written %d bytes of media", data.length));
-                }
-            } catch (IOException e) {
-                Log.e(LOG_TAG, "Media transfer to decoder failed", e);
-                e.printStackTrace();
+            ByteBuffer dataBuffer = ByteBuffer.wrap(data);
+            Date now = new Date(dataBuffer.getLong());
+            MainActivity.this.runOnUiThread(() -> mTimestamp.setText(datetimeFormat.format(now)));
+            synchronized (mediaStream) {
+                mediaStream.write(data, dataBuffer.position(), dataBuffer.remaining());
+                Log.v(LOG_TAG, String.format("written %d bytes of media", data.length));
             }
         }
 
@@ -229,6 +246,7 @@ public class MainActivity extends AppCompatActivity {
 
         mCameraControls = binding.cameraControls;
         mFlashButton = binding.flashButton;
+        mTimestamp = binding.timestamp;
 
         mTextureView = binding.fullscreenContent;
         ((View) mTextureView.getParent()).addOnLayoutChangeListener(

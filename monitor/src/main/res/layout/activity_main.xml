@@ -50,51 +50,62 @@
                 android:layout_weight="1"
                 android:onClick="onConnectClicked"
                 android:text="@string/connect_button"
-                tools:text="@string/connect_button"
-                tools:ignore="UsingOnClickInXml" />
+                tools:ignore="UsingOnClickInXml"
+                tools:text="@string/connect_button" />
 
             <ProgressBar
                 android:id="@+id/connection_progress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:visibility="gone" />
-
         </LinearLayout>
 
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/camera_controls"
-            style="@style/Widget.Theme.P2PMonitoring.ButtonBar.Fullscreen"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|end"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:visibility="invisible"
-            tools:ignore="UselessParent">
+            android:layout_height="match_parent"
+            android:layout_gravity="end">
 
-            <Button
-                android:id="@+id/disconnect_button"
-                style="?android:attr/buttonBarButtonStyle"
+            <LinearLayout
+                style="@style/Widget.Theme.P2PMonitoring.ButtonBar.Fullscreen"
                 android:layout_width="wrap_content"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:onClick="onDisconnectClicked"
-                android:text="@string/disconnect_button"
-                tools:text="@string/disconnect_button"
-                tools:ignore="UsingOnClickInXml" />
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:visibility="invisible"
+                tools:ignore="UselessParent">
 
-            <Button
-                android:id="@+id/flash_button"
-                style="?android:attr/buttonBarButtonStyle"
+                <Button
+                    android:id="@+id/disconnect_button"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:onClick="onDisconnectClicked"
+                    android:text="@string/disconnect_button"
+                    tools:ignore="UsingOnClickInXml"
+                    tools:text="@string/disconnect_button" />
+
+                <Button
+                    android:id="@+id/flash_button"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:onClick="onFlashClicked"
+                    android:text="@string/torch_on_button"
+                    tools:ignore="UsingOnClickInXml"
+                    tools:text="@string/torch_on_button" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/timestamp"
                 android:layout_width="wrap_content"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:onClick="onFlashClicked"
-                android:text="@string/torch_on_button"
-                tools:text="@string/torch_on_button"
-                tools:ignore="UsingOnClickInXml" />
-
-        </LinearLayout>
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|bottom"
+                tools:text="YYYY-MM-DD HH:mm:ss" />
+        </FrameLayout>
     </FrameLayout>
 
 </FrameLayout>
