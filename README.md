@@ -19,6 +19,7 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [ ] Create app icons
 - [ ] Remaster enums via `@IntDef` or static `byte`->value maps
 - [ ] Refactor `Message` acquisition via `obtain()`
+- [ ] Secure transport layer
 - [ ] Create unit tests 
 - [ ] Client: control frame rotation
 - [ ] Protocol: capture (high-res) photo

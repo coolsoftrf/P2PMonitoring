@@ -152,7 +152,6 @@ public class StreamingServer extends Thread {
     public enum Situation {
         CLIENT_STREAMING_ERROR,
         CLIENT_NOTIFICATION_ERROR,
-        MALFORMED_COMMAND,
         UNKNOWN_COMMAND,
     }
 }

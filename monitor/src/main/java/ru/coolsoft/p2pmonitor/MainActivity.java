@@ -34,6 +34,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Flashlight;
@@ -43,7 +44,6 @@ import ru.coolsoft.p2pmonitor.databinding.ActivityMainBinding;
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
  */
-@SuppressLint("SimpleDateFormat")
 public class MainActivity extends AppCompatActivity {
     /**
      * Some older devices need a small delay between UI widget updates
@@ -57,7 +57,7 @@ public class MainActivity extends AppCompatActivity {
         DateFormat format = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.LONG);
         if (format instanceof SimpleDateFormat) {
             String pattern = ((SimpleDateFormat) format).toLocalizedPattern();
-            datetimeFormat = new SimpleDateFormat(pattern.replace("ss", "ss.SSS"));
+            datetimeFormat = new SimpleDateFormat(pattern.replace("ss", "ss.SSS"), Locale.getDefault());
         } else {
             datetimeFormat = format;
         }

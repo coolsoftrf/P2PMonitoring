@@ -49,6 +49,10 @@ public class PortMappingServer {
                     String protocol = PortMappingProtocol.values()[msg.arg2].toString();
                     String description = (String) msg.obj;
                     activeGW = gatewayDiscover.getValidGateway();
+                    if (activeGW == null) {
+                        mappingListener.onPortMappingServerError(Situation.UPNP_GATEWAY_NOT_FOUND_ERROR, null);
+                        break;
+                    }
 
                     PortMappingEntry mappingEntry = new PortMappingEntry();
                     try {
@@ -130,7 +134,7 @@ public class PortMappingServer {
 
     public enum Situation {
         DISCOVERY_ERROR,
-        MAPPING_ERROR,
-        TIMEOUT
+        UPNP_GATEWAY_NOT_FOUND_ERROR,
+        MAPPING_ERROR
     }
 }

@@ -11,6 +11,7 @@ import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
 import static ru.coolsoft.common.Command.FORMAT;
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
 import static ru.coolsoft.common.Constants.SIZEOF_LONG;
+import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
 
 import android.Manifest;
 import android.content.Context;
@@ -27,6 +28,9 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.RouteInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -50,12 +54,16 @@ import org.bitlet.weupnp.PortMappingEntry;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 
@@ -75,8 +83,9 @@ public class MainActivity extends AppCompatActivity {
     private boolean torchMode = false;
 
     private TextureView mTextureView = null;
-    private TextView mInfoText = null;
+    private TextView mBindingInfoText = null;
     private TextView mExternalInfoText = null;
+    private TextView mInfoText = null;
 
     private MediaCodec mCodec = null;
     Surface mEncoderSurface;
@@ -127,8 +136,9 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onPortMappingServerError(PortMappingServer.Situation situation, @Nullable Throwable e) {
-            runOnUiThread(() -> mExternalInfoText.setText(getString(R.string.mapping_error,
-                    e == null ? "" : e.getClass().getSimpleName())));
+            String format = e == null ? "{0}" : "{0}: {1}";
+            runOnUiThread(() -> mExternalInfoText.setText(getString(R.string.mapping_error, MessageFormat.format(format,
+                    situation.toString(), e == null ? "" : e.getClass().getSimpleName()))));
         }
 
         private void refreshClientCounter() {
@@ -168,15 +178,10 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onError(StreamWorker worker, StreamingServer.Situation situation, Object details) {
-            switch (situation) {
-                case UNKNOWN_COMMAND:
-                    Toast.makeText(MainActivity.this, getString(R.string.unknown_command, (Integer) details), Toast.LENGTH_SHORT).show();
-                    break;
-                case MALFORMED_COMMAND:
-                    Toast.makeText(MainActivity.this, getString(R.string.malformed_command, (Command) details), Toast.LENGTH_SHORT).show();
-                    break;
-                default:
-                    Toast.makeText(MainActivity.this, R.string.unknown_error, Toast.LENGTH_SHORT).show();
+            if (situation == UNKNOWN_COMMAND) {
+                Toast.makeText(MainActivity.this, getString(R.string.unknown_command, (Integer) details), Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(MainActivity.this, R.string.unknown_error, Toast.LENGTH_SHORT).show();
             }
         }
     };
@@ -208,40 +213,10 @@ public class MainActivity extends AppCompatActivity {
         mTextureView = binding.textureView;
         mInfoText = binding.infoText;
         mExternalInfoText = binding.extenalInfoText;
+        mBindingInfoText = binding.localBinding;
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-                    (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)) {
-                requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
-            }
-        }
-
-        streamingServer = new StreamingServer(eventListener);
-        streamingServer.start();
-
-        mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        try {
-            if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
-                onTorchUnavailable();
-            }
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
-
-        try {
-            mCameras = new CameraService[mCameraManager.getCameraIdList().length];
-
-            for (String cameraID : mCameraManager.getCameraIdList()) {
-                Log.i(LOG_TAG, "cameraID: " + cameraID);
-                int id = Integer.parseInt(cameraID);
-                mCameras[id] = new CameraService(cameraID);
-
-            }
-        } catch (CameraAccessException e) {
-            Log.e(LOG_TAG, e.getMessage());
-            e.printStackTrace();
-        }
-
+        setupServer();
+        setupCamera();
         setUpMediaCodec();
     }
 
@@ -275,6 +250,68 @@ public class MainActivity extends AppCompatActivity {
 
         if (mCameras[DEFAULT_CAMERA_IDX] != null && !mCameras[DEFAULT_CAMERA_IDX].isOpen())
             mCameras[DEFAULT_CAMERA_IDX].openCamera();
+    }
+
+    private void setupServer() {
+        streamingServer = new StreamingServer(eventListener);
+        streamingServer.start();
+
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        Network[] nets = cm.getAllNetworks();
+
+        for (Network net : nets) {
+            for (RouteInfo route : cm.getLinkProperties(net).getRoutes()) {
+                if (!route.getGateway().isAnyLocalAddress()) {
+                    NetworkInterface anInterface;
+                    try {
+                        anInterface = NetworkInterface.getByName(route.getInterface());
+                    } catch (SocketException e) {
+                        return;
+                    }
+                    Enumeration<InetAddress> interfaceAddresses = anInterface.getInetAddresses();
+                    while (interfaceAddresses.hasMoreElements()) {
+                        InetAddress inetAddress = interfaceAddresses.nextElement();
+                        if (!inetAddress.isLoopbackAddress() && inetAddress instanceof Inet4Address) {
+                            mBindingInfoText.setText(getString(R.string.binding_info, inetAddress));
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    private void setupCamera() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
+                    (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)) {
+                requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+                //ToDo: handle case of permission denial
+            }
+        }
+
+        mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try {
+            if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
+                onTorchUnavailable();
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+
+        try {
+            mCameras = new CameraService[mCameraManager.getCameraIdList().length];
+
+            for (String cameraID : mCameraManager.getCameraIdList()) {
+                Log.i(LOG_TAG, "cameraID: " + cameraID);
+                int id = Integer.parseInt(cameraID);
+                mCameras[id] = new CameraService(cameraID);
+
+            }
+        } catch (CameraAccessException e) {
+            Log.e(LOG_TAG, e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private void setUpMediaCodec() {
