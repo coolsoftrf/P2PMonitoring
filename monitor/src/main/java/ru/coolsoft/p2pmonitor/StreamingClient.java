@@ -1,5 +1,6 @@
 package ru.coolsoft.p2pmonitor;
 
+import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
 import static ru.coolsoft.common.StreamId.CONTROL;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CLOSING;
@@ -10,11 +11,13 @@ import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.SOCKET_
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.List;
@@ -25,6 +28,8 @@ import ru.coolsoft.common.Protocol;
 import ru.coolsoft.common.StreamId;
 
 public class StreamingClient extends Thread {
+    private static final String LOG_TAG = StreamingClient.class.getSimpleName();
+
     private final EventListener eventListener;
     private final Handler handler;
     private final String serverAddress;
@@ -44,11 +49,7 @@ public class StreamingClient extends Thread {
     }
 
     public void sendCommand(Command command, byte[] data) {
-        Message msg = new Message();
-        msg.arg1 = CONTROL.id;
-        msg.arg2 = command.id;
-        msg.obj = data;
-        handler.sendMessage(msg);
+        Message.obtain(handler, UNUSED, CONTROL.id, command.id, data).sendToTarget();
     }
 
     @Override
@@ -63,7 +64,8 @@ public class StreamingClient extends Thread {
         }
 
         try {
-            socket = new Socket(address, Defaults.SERVER_PORT);
+            socket = new Socket();
+            socket.connect(new InetSocketAddress(address, Defaults.SERVER_PORT));
             eventListener.onConnected();
         } catch (IOException e) {
             eventListener.onError(SOCKET_INITIALIZATION_ERROR, e);
@@ -84,23 +86,37 @@ public class StreamingClient extends Thread {
             while (true) {
                 int streamId = in.read();
                 switch (StreamId.byId(streamId)) {
-                    case MEDIA:
+                    case MEDIA: {
                         byte[] media = Protocol.readData(in);
                         eventListener.onMedia(media);
                         break;
-                    case CONTROL:
-                        Command cmd = Command.byId(in.read());
-                        byte[] data = Protocol.readData(in);
+                    }
+                    case CONTROL: {
+                        int cmdId = in.read();
+                        Command cmd = Command.byId(cmdId);
+                        byte[] data;
+                        switch (cmd) {
+                            case UNDEFINED:
+                                data = new byte[]{(byte) cmdId};
+                                break;
+                            case END_OF_STREAM:
+                                break loop;
+                            default:
+                                data = Protocol.readData(in);
+                                break;
+                        }
                         eventListener.onCommand(cmd, data);
                         break;
-                    case END_OF_STREAM:
-                        terminate();
-                        break loop;
+                    }
                     default:
-                        throw new IllegalStateException("Unexpected value: " + Command.byId(streamId));
+                        Log.e(LOG_TAG, String.format("Unexpected stream ID: %d", streamId));
+                    case END_OF_STREAM:
+                        break loop;
                 }
             }
         } catch (IOException e) {
+            Log.w(LOG_TAG, "Client loop interrupted", e);
+        } finally {
             terminate();
         }
     }

@@ -4,6 +4,7 @@ import static android.media.MediaFormat.KEY_HEIGHT;
 import static android.media.MediaFormat.KEY_WIDTH;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
 import static ru.coolsoft.common.Protocol.MEDIA_BUFFER_SIZE;
 
 import android.annotation.SuppressLint;
@@ -12,6 +13,8 @@ import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.os.Bundle;
 import android.os.Handler;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.Surface;
 import android.view.TextureView;
@@ -90,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
     private View mConnectButton;
     private View mConnectionProgress;
     private View mCameraControls;
+    private ViewGroup mAvailabilityDependentControls;
     private Button mFlashButton;
     private TextView mTimestamp;
     private final Runnable mShowPart2Runnable = new Runnable() {
@@ -109,15 +113,25 @@ public class MainActivity extends AppCompatActivity {
     private final Runnable mHideRunnable = this::hideConnectionControls;
 
     private EditText mAddressEdit;
+    private final TextWatcher addressTextWatcher = new TextWatcher() {
+        @Override
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+        }
+
+        @Override
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+
+        }
+
+        @Override
+        public void afterTextChanged(Editable s) {
+            mConnectButton.setEnabled(s.length() > 0);
+        }
+    };
+
     private StreamingClient client;
     private final StreamingClient.EventListener eventListener = new StreamingClient.EventListener() {
-
-        private void restoreConnectControls() {
-            runOnUiThread(() -> {
-                mConnectButton.setVisibility(View.VISIBLE);
-                mConnectionProgress.setVisibility(View.GONE);
-            });
-        }
 
         @Override
         public void onConnected() {
@@ -137,15 +151,6 @@ public class MainActivity extends AppCompatActivity {
                 stopCodec();
                 showConnectionControls();
             });
-        }
-
-        private void stopCodec() {
-            if (mCodec != null) {
-                mCodec.stop();
-                mCodec.reset();
-                mCodec.release();
-                mCodec = null;
-            }
         }
 
         @Override
@@ -170,38 +175,37 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 switch (command) {
                     case FLASHLIGHT:
-                        if (data == null || data.length != 1) {
-                            Toast.makeText(MainActivity.this,
-                                    getString(R.string.invalid_command,
-                                            command.toString(),
-                                            data == null ? "null" : Integer.toString(data.length)),
-                                    Toast.LENGTH_SHORT).show();
-                            return;
+                        if (checkParameters(command, 1, data)) {
+                            int txt;
+                            Flashlight mode = Flashlight.getById(data[0]);
+                            switch (mode) {
+                                case OFF:
+                                    txt = R.string.torch_off_button;
+                                    break;
+                                case ON:
+                                    txt = R.string.torch_on_button;
+                                    break;
+                                case UNAVAILABLE:
+                                    txt = R.string.torch_unavailable;
+                                    break;
+                                default:
+                                    Toast.makeText(MainActivity.this,
+                                            getString(R.string.malformed_command,
+                                                    command.toString(),
+                                                    Integer.toString(data[0])),
+                                            Toast.LENGTH_SHORT).show();
+                                    return;
+                            }
+                            setCameraControlAvailability(mFlashButton, mode != Flashlight.UNAVAILABLE);
+                            mFlashButton.setText(txt);
                         }
-                        int txt;
-                        Flashlight mode = Flashlight.getById(data[0]);
-                        switch (mode) {
-                            case OFF:
-                                txt = R.string.torch_off_button;
-                                break;
-                            case ON:
-                                txt = R.string.torch_on_button;
-                                break;
-                            case UNAVAILABLE:
-                                txt = R.string.torch_unavailable;
-                                break;
-                            default:
-                                Toast.makeText(MainActivity.this,
-                                        getString(R.string.malformed_command,
-                                                command.toString(),
-                                                Integer.toString(data[0])),
-                                        Toast.LENGTH_SHORT).show();
-                                return;
-                        }
-                        mFlashButton.setEnabled(mode != Flashlight.UNAVAILABLE);
-                        mFlashButton.setText(txt);
                         break;
-                    case FORMAT:
+                    case AVAILABILITY:
+                        if (checkParameters(command, 2, data)) {
+                            setCameraControlsAvailability(data[1] == CAMERA_AVAILABLE);
+                        }
+                        break;
+                    case FORMAT: {
                         ByteBuffer buffer = ByteBuffer.wrap(data);
                         List<byte[]> csdBuffers = new ArrayList<>();
                         while (buffer.hasRemaining()) {
@@ -212,8 +216,9 @@ public class MainActivity extends AppCompatActivity {
                         }
                         onFormat(csdBuffers);
                         break;
-                    default:
-                        Toast.makeText(MainActivity.this, getString(R.string.unknown_command, command.aux), Toast.LENGTH_SHORT).show();
+                    }
+                    case UNDEFINED:
+                        Toast.makeText(MainActivity.this, getString(R.string.unknown_command, data[0]), Toast.LENGTH_SHORT).show();
                 }
             });
         }
@@ -225,10 +230,61 @@ public class MainActivity extends AppCompatActivity {
                 case HOST_UNRESOLVED_ERROR:
                 case SOCKET_INITIALIZATION_ERROR:
                     restoreConnectControls();
-                    client.terminate();
+                    if (client != null) {
+                        client.terminate();
+                    }
             }
         }
+
+        private boolean checkParameters(Command command, int expectedCount, byte[] data) {
+            if (data == null || data.length != expectedCount) {
+                Toast.makeText(MainActivity.this,
+                        getString(R.string.invalid_command,
+                                command.toString(),
+                                data == null ? "null" : Integer.toString(data.length)),
+                        Toast.LENGTH_SHORT).show();
+                return false;
+            }
+            return true;
+        }
+
+        private void stopCodec() {
+            if (mCodec != null) {
+                mCodec.stop();
+                mCodec.reset();
+                mCodec.release();
+                mCodec = null;
+            }
+        }
+
+        private void restoreConnectControls() {
+            runOnUiThread(() -> setConnectionControlsVisibility(true));
+        }
     };
+
+    private void setCameraControlAvailability(View control, boolean available) {
+        control.setTag(R.id.TAG_KEY_AVAILABLE, available);
+        if (mAvailabilityDependentControls.isEnabled()) {
+            control.setEnabled(available);
+        }
+    }
+
+    private void setCameraControlsAvailability(boolean available) {
+        setViewGroupControlsEnabled(available, mAvailabilityDependentControls);
+    }
+
+    private void setViewGroupControlsEnabled(boolean enable, ViewGroup vg) {
+        for (int i = 0; i < vg.getChildCount(); i++) {
+            View child = vg.getChildAt(i);
+            if (child instanceof ViewGroup) {
+                setViewGroupControlsEnabled(enable, (ViewGroup) child);
+            } else {
+                if (Boolean.TRUE.equals(child.getTag(R.id.TAG_KEY_AVAILABLE))) {
+                    child.setEnabled(enable);
+                }
+            }
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -241,11 +297,13 @@ public class MainActivity extends AppCompatActivity {
         mControlsView = binding.connectionControls;
 
         mAddressEdit = binding.addressEdit;
+        mAddressEdit.addTextChangedListener(addressTextWatcher);
         mConnectionProgress = binding.connectionProgress;
         mConnectButton = binding.connectButton;
 
         mCameraControls = binding.cameraControls;
         mFlashButton = binding.flashButton;
+        mAvailabilityDependentControls = binding.availabilityDependentControls;
         mTimestamp = binding.timestamp;
 
         mTextureView = binding.fullscreenContent;
@@ -275,6 +333,14 @@ public class MainActivity extends AppCompatActivity {
         delayedHide();
     }
 
+    private void setConnectionControlsVisibility(boolean visible) {
+        runOnUiThread(() -> {
+            mConnectButton.setVisibility(visible ? View.VISIBLE : View.GONE);
+            mConnectionProgress.setVisibility(visible ? View.GONE : View.VISIBLE);
+            mAddressEdit.setEnabled(visible);
+        });
+    }
+
     private void updateTextureLayout(int parentWidth, int parentHeight) {
         float width, height;
         if (mCodec != null) {
@@ -286,14 +352,28 @@ public class MainActivity extends AppCompatActivity {
         }
 
         ViewGroup.LayoutParams layoutParams = mTextureView.getLayoutParams();
+        boolean layoutUpdateRequired;
         if ((float) parentWidth / (float) parentHeight > width / height) {
-            layoutParams.height = MATCH_PARENT;
-            layoutParams.width = (int) (parentHeight / height * width);
+            layoutUpdateRequired = setLayoutParams(layoutParams, (int) (parentHeight / height * width), MATCH_PARENT);
         } else {
-            layoutParams.width = MATCH_PARENT;
-            layoutParams.height = (int) (parentWidth / width * height);
+            layoutUpdateRequired = setLayoutParams(layoutParams, MATCH_PARENT, (int) (parentWidth / width * height));
         }
-        mTextureView.setLayoutParams(layoutParams);
+        if (layoutUpdateRequired) {
+            mTextureView.setLayoutParams(layoutParams);
+        }
+    }
+
+    private boolean setLayoutParams(ViewGroup.LayoutParams params, int width, int height) {
+        boolean result = false;
+        if (params.width != width) {
+            params.width = width;
+            result = true;
+        }
+        if (params.height != height) {
+            params.height = height;
+            result = true;
+        }
+        return result;
     }
 
     private synchronized void startDecoder(List<byte[]> csdBuffers) {
@@ -404,12 +484,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onConnectClicked(View view) {
-        //ToDo: handle text editing to enable/disable Connect button
         String address = mAddressEdit.getText().toString().trim();
         if (client == null) {
             if (address.length() > 0) {
-                mConnectButton.setVisibility(View.GONE);
-                mConnectionProgress.setVisibility(View.VISIBLE);
+                setConnectionControlsVisibility(false);
                 client = new StreamingClient(address, eventListener);
                 client.start();
             } else {
@@ -425,7 +503,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onDisconnectClicked(View view) {
-        client.terminate();
+        if (client != null) {
+            client.terminate();
+        }
+    }
+
+    public void onCancelConnectionClicked(View view) {
+        if (client != null) {
+            client.terminate();
+        }
     }
 
     private class DecoderCallback extends MediaCodec.Callback {

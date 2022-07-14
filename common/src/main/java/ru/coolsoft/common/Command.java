@@ -3,11 +3,12 @@ package ru.coolsoft.common;
 public enum Command {
     FLASHLIGHT(0),
     CAPS(1),
-    FORMAT(2),
-    UNDEFINED(-1);
+    AVAILABILITY(2),
+    FORMAT(3),
+    END_OF_STREAM(Protocol.END_OF_STREAM),
+    UNDEFINED(-256);
 
     public final int id;
-    public int aux;
 
     Command(int commandId) {
         id = commandId;
@@ -20,10 +21,12 @@ public enum Command {
             case 1:
                 return CAPS;
             case 2:
+                return AVAILABILITY;
+            case 3:
                 return FORMAT;
+            case Protocol.END_OF_STREAM:
+                return END_OF_STREAM;
             default:
-                //ToDo: fix thread unsafe approach
-                UNDEFINED.aux = id;
                 return UNDEFINED;
         }
     }

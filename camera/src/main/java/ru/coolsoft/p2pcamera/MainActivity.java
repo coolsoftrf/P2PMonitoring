@@ -8,7 +8,10 @@ import static android.hardware.camera2.CameraMetadata.FLASH_MODE_TORCH;
 import static android.hardware.camera2.CaptureRequest.CONTROL_AE_MODE;
 import static android.hardware.camera2.CaptureRequest.FLASH_MODE;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
+import static ru.coolsoft.common.Command.AVAILABILITY;
 import static ru.coolsoft.common.Command.FORMAT;
+import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
+import static ru.coolsoft.common.Constants.CAMERA_UNAVAILABLE;
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
 import static ru.coolsoft.common.Constants.SIZEOF_LONG;
 import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
@@ -47,7 +50,6 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 
 import org.bitlet.weupnp.GatewayDevice;
 import org.bitlet.weupnp.PortMappingEntry;
@@ -74,6 +76,7 @@ import ru.coolsoft.p2pcamera.databinding.ActivityMainBinding;
 
 public class MainActivity extends AppCompatActivity {
     private static final String LOG_TAG = "P2PCamera";
+    public static final int REQUEST_CODE_CAMERA = 1;
 
     private CameraManager mCameraManager = null;
     CameraService[] mCameras = null;
@@ -100,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void onTorchUnavailable() {
         torchAvailable = false;
-        streamingServer.notifyClients(Command.FLASHLIGHT, new byte[]{(byte) Flashlight.UNAVAILABLE.mode});
+        eventListener.notifyTorchMode();
     }
 
     private void onTorchModeChanged(boolean enabled) {
@@ -112,12 +115,11 @@ public class MainActivity extends AppCompatActivity {
     private final EventListener eventListener = new EventListener() {
         @Override
         public void onGatewaysDiscovered(Map<InetAddress, GatewayDevice> gateways) {
-            StringBuffer msg = new StringBuffer(MessageFormat.format("Discovered {0} gateways:", gateways.entrySet().size()));
+            StringBuilder msg = new StringBuilder(getString(R.string.gateways_discovered, gateways.entrySet().size()));
             for (Map.Entry<InetAddress, GatewayDevice> entry : gateways.entrySet()) {
                 msg.append(MessageFormat.format("\r\n@{0}: {1}", entry.getKey(), entry.getValue().getURLBase()));
             }
-
-            Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show();
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, msg, Toast.LENGTH_LONG).show());
         }
 
         @Override
@@ -151,7 +153,7 @@ public class MainActivity extends AppCompatActivity {
             refreshClientCounter();
 
             byte[] csdData = getCodecSpecificDataArray();
-            if (csdData != null) {
+            if (csdData != null && csdData.length > 0) {
                 worker.notifyClient(FORMAT, csdData);
             }
         }
@@ -164,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onToggleFlashlight() {
-            if (torchAvailable) {
+            if (torchAvailable && isCameraInitialized()) {
                 mCameras[DEFAULT_CAMERA_IDX].setFlashMode(!torchMode);
                 onTorchModeChanged(!torchMode);
             }
@@ -173,15 +175,31 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void notifyTorchMode() {
             streamingServer.notifyClients(Command.FLASHLIGHT,
-                    new byte[]{(byte) (torchMode ? Flashlight.ON : Flashlight.OFF).mode});
+                    new byte[]{(byte) (torchAvailable
+                            ? torchMode ? Flashlight.ON : Flashlight.OFF
+                            : Flashlight.UNAVAILABLE).mode});
+        }
+
+        @Override
+        public void notifyAvailability() {
+            streamingServer.notifyClients(AVAILABILITY, new byte[]{DEFAULT_CAMERA_IDX,
+                    (byte) (isCameraInitialized() && mCameras[DEFAULT_CAMERA_IDX].isOpen()
+                            ? CAMERA_AVAILABLE
+                            : CAMERA_UNAVAILABLE)
+            });
         }
 
         @Override
         public void onError(StreamWorker worker, StreamingServer.Situation situation, Object details) {
             if (situation == UNKNOWN_COMMAND) {
-                Toast.makeText(MainActivity.this, getString(R.string.unknown_command, (Integer) details), Toast.LENGTH_SHORT).show();
+                //noinspection RedundantCast
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        getString(R.string.unknown_command, (Integer) details), Toast.LENGTH_SHORT).show()
+                );
             } else {
-                Toast.makeText(MainActivity.this, R.string.unknown_error, Toast.LENGTH_SHORT).show();
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        R.string.unknown_error, Toast.LENGTH_SHORT).show()
+                );
             }
         }
     };
@@ -212,7 +230,7 @@ public class MainActivity extends AppCompatActivity {
 
         mTextureView = binding.textureView;
         mInfoText = binding.infoText;
-        mExternalInfoText = binding.extenalInfoText;
+        mExternalInfoText = binding.externalInfoText;
         mBindingInfoText = binding.localBinding;
 
         setupServer();
@@ -235,7 +253,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
-        if (mCameras[DEFAULT_CAMERA_IDX].isOpen()) {
+        if (isCameraInitialized() && mCameras[DEFAULT_CAMERA_IDX].isOpen()) {
             mCameras[DEFAULT_CAMERA_IDX].closeCamera();
         }
 
@@ -248,8 +266,48 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         startBackgroundThread();
 
-        if (mCameras[DEFAULT_CAMERA_IDX] != null && !mCameras[DEFAULT_CAMERA_IDX].isOpen())
+        if (isCameraInitialized() && !mCameras[DEFAULT_CAMERA_IDX].isOpen()) {
             mCameras[DEFAULT_CAMERA_IDX].openCamera();
+        }
+    }
+
+    private boolean isCameraInitialized() {
+        return mCameras != null && mCameras[DEFAULT_CAMERA_IDX] != null;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode != REQUEST_CODE_CAMERA || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        initCamera();
+    }
+
+    private void initCamera() {
+        mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        try {
+            if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
+                onTorchUnavailable();
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+
+        try {
+            mCameras = new CameraService[mCameraManager.getCameraIdList().length];
+
+            for (String cameraID : mCameraManager.getCameraIdList()) {
+                Log.i(LOG_TAG, "cameraID: " + cameraID);
+                int id = Integer.parseInt(cameraID);
+                mCameras[id] = new CameraService(cameraID);
+            }
+        } catch (CameraAccessException e) {
+            Log.e(LOG_TAG, e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private void setupServer() {
@@ -282,35 +340,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupCamera() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-                    (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)) {
-                requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
-                //ToDo: handle case of permission denial
-            }
-        }
-
-        mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-        try {
-            if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
-                onTorchUnavailable();
-            }
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
-        }
-
-        try {
-            mCameras = new CameraService[mCameraManager.getCameraIdList().length];
-
-            for (String cameraID : mCameraManager.getCameraIdList()) {
-                Log.i(LOG_TAG, "cameraID: " + cameraID);
-                int id = Integer.parseInt(cameraID);
-                mCameras[id] = new CameraService(cameraID);
-
-            }
-        } catch (CameraAccessException e) {
-            Log.e(LOG_TAG, e.getMessage());
-            e.printStackTrace();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQUEST_CODE_CAMERA);
+        } else {
+            initCamera();
         }
     }
 
@@ -363,7 +397,7 @@ public class MainActivity extends AppCompatActivity {
 
     public class CameraService {
         private final String mCameraID;
-        private CameraDevice mCameraDevice = null;
+        private volatile CameraDevice mCameraDevice = null;
         private CameraCaptureSession mSession;
         private CaptureRequest.Builder mPreviewBuilder;
 
@@ -376,16 +410,20 @@ public class MainActivity extends AppCompatActivity {
             public void onOpened(CameraDevice camera) {
                 mCameraDevice = camera;
                 Log.i(LOG_TAG, "Open camera  with id:" + mCameraDevice.getId());
+                streamingServer.notifyClients(AVAILABILITY, new byte[]{DEFAULT_CAMERA_IDX, CAMERA_AVAILABLE});
 
                 startCameraPreviewSession();
             }
 
             @Override
             public void onDisconnected(CameraDevice camera) {
-                mCameraDevice.close();
-
                 Log.i(LOG_TAG, "disconnect camera  with id:" + mCameraDevice.getId());
-                mCameraDevice = null;
+                closeCamera();
+            }
+
+            @Override
+            public void onClosed(@NonNull CameraDevice camera) {
+                streamingServer.notifyClients(AVAILABILITY, new byte[]{DEFAULT_CAMERA_IDX, CAMERA_UNAVAILABLE});
             }
 
             @Override
@@ -483,7 +521,7 @@ public class MainActivity extends AppCompatActivity {
             setRepeatingRequest();
         }
 
-        private void configureTexture() {
+        private synchronized void configureTexture() {
             CameraCharacteristics cameraCharacteristics;
             if (mCameraDevice == null) {
                 //camera was closed before we managed to get here
@@ -518,8 +556,14 @@ public class MainActivity extends AppCompatActivity {
                         new CameraCaptureSession.StateCallback() {
                             @Override
                             public void onConfigured(CameraCaptureSession session) {
-                                mSession = session;
-                                setRepeatingRequest();
+                                if (isOpen()) {
+                                    synchronized (CameraService.this) {
+                                        if (isOpen()) {
+                                            mSession = session;
+                                            setRepeatingRequest();
+                                        }
+                                    }
+                                }
                             }
 
                             @Override
@@ -582,9 +626,9 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        public void closeCamera() {
+        public synchronized void closeCamera() {
             Log.i(LOG_TAG, "Closing camera");
-            if (mCameraDevice != null) {
+            if (isOpen()) {
                 mCameraDevice.close();
                 mCameraDevice = null;
             }
@@ -592,7 +636,7 @@ public class MainActivity extends AppCompatActivity {
 
         //ToDo: call it on last client disconnection
         public void stopStreamingVideo() {
-            if (mCameraDevice != null & mCodec != null) {
+            if (isOpen() & mCodec != null) {
                 try {
                     mSession.stopRepeating();
                     mSession.abortCaptures();

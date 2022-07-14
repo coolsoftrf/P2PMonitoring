@@ -48,23 +48,44 @@
                 android:layout_width="wrap_content"
                 android:layout_height="0dp"
                 android:layout_weight="1"
+                android:enabled="false"
                 android:onClick="onConnectClicked"
                 android:text="@string/connect_button"
                 tools:ignore="UsingOnClickInXml"
                 tools:text="@string/connect_button" />
 
-            <ProgressBar
+            <LinearLayout
                 android:id="@+id/connection_progress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:visibility="gone" />
+                android:orientation="horizontal"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <ProgressBar
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+
+                <Button
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:onClick="onCancelConnectionClicked"
+                    android:text="@string/cancel_connection_button"
+                    tools:ignore="UsingOnClickInXml"
+                    tools:text="@string/cancel_connection_button" />
+            </LinearLayout>
+
         </LinearLayout>
 
         <FrameLayout
             android:id="@+id/camera_controls"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
-            android:layout_gravity="end">
+            android:layout_gravity="end"
+            android:visibility="invisible"
+            tools:visibility="visible">
 
             <LinearLayout
                 style="@style/Widget.Theme.P2PMonitoring.ButtonBar.Fullscreen"
@@ -73,11 +94,9 @@
                 android:layout_gravity="top|end"
                 android:gravity="center"
                 android:orientation="vertical"
-                android:visibility="invisible"
                 tools:ignore="UselessParent">
 
                 <Button
-                    android:id="@+id/disconnect_button"
                     style="?android:attr/buttonBarButtonStyle"
                     android:layout_width="wrap_content"
                     android:layout_height="0dp"
@@ -87,16 +106,42 @@
                     tools:ignore="UsingOnClickInXml"
                     tools:text="@string/disconnect_button" />
 
-                <Button
-                    android:id="@+id/flash_button"
-                    style="?android:attr/buttonBarButtonStyle"
+                <LinearLayout
+                    android:id="@+id/availability_dependent_controls"
                     android:layout_width="wrap_content"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:onClick="onFlashClicked"
-                    android:text="@string/torch_on_button"
-                    tools:ignore="UsingOnClickInXml"
-                    tools:text="@string/torch_on_button" />
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="vertical">
+
+                    <Button
+                        android:id="@+id/flash_button"
+                        style="?android:attr/buttonBarButtonStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:onClick="onFlashClicked"
+                        android:text="@string/torch_on_button"
+                        tools:ignore="UsingOnClickInXml"
+                        tools:text="@string/torch_on_button" />
+
+                    <Button
+                        style="?android:attr/buttonBarButtonStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:enabled="false"
+                        android:text="@string/dummy_button"
+                        tools:ignore="UsingOnClickInXml"
+                        tools:text="dummy button">
+
+                        <tag
+                            android:id="@id/TAG_KEY_AVAILABLE"
+                            android:value="false" />
+
+                    </Button>
+
+                </LinearLayout>
+
             </LinearLayout>
 
             <TextView
@@ -104,8 +149,11 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="end|bottom"
+                android:background="@color/white_underlay"
+                android:paddingHorizontal="@dimen/default_margin_padding"
                 tools:text="YYYY-MM-DD HH:mm:ss" />
         </FrameLayout>
+
     </FrameLayout>
 
 </FrameLayout>

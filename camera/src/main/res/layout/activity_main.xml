@@ -10,28 +10,31 @@
         android:id="@+id/texture_view"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:keepScreenOn="true"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        android:keepScreenOn="true" />
+        app:layout_constraintTop_toTopOf="parent" />
 
     <TextView
         android:id="@+id/info_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:text="Hello World!"
+        android:layout_marginBottom="@dimen/default_margin_padding"
+        android:background="@color/white_underlay"
+        android:paddingHorizontal="@dimen/default_margin_padding"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent" />
 
     <TextView
-        android:id="@+id/extenal_info_text"
+        android:id="@+id/external_info_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="@dimen/default_margin_padding"
+        android:background="@color/white_underlay"
         android:gravity="center"
+        android:paddingHorizontal="@dimen/default_margin_padding"
         app:layout_constraintBottom_toTopOf="@+id/info_text"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent" />
@@ -40,9 +43,11 @@
         android:id="@+id/local_binding"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="@dimen/default_margin_padding"
+        android:background="@color/white_underlay"
         android:gravity="center"
-        app:layout_constraintBottom_toTopOf="@+id/extenal_info_text"
+        android:paddingHorizontal="@dimen/default_margin_padding"
+        app:layout_constraintBottom_toTopOf="@+id/external_info_text"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent" />
 

@@ -1,6 +1,8 @@
 package ru.coolsoft.p2pcamera;
 
+import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
+import static ru.coolsoft.common.Protocol.readData;
 import static ru.coolsoft.common.StreamId.CONTROL;
 import static ru.coolsoft.common.StreamId.MEDIA;
 import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
@@ -25,7 +27,7 @@ public class StreamWorker extends Thread {
     private final WorkerEventListener workerListener;
     private final EventListener listener;
     private final Handler handler;
-    private Socket socket;
+    private volatile Socket socket;
     private HandlerThread handlerThread;
     private InputStream in;
     private OutputStream out;
@@ -68,12 +70,15 @@ public class StreamWorker extends Thread {
             e.printStackTrace();
         }
 
-        //disconnected socket reports null address on API 22, so notify listener prior to closing the socket
-        workerListener.onClientDisconnected(this);
         try {
             if (socket != null) {
-                socket.close();
-                socket = null;
+                synchronized (this) {
+                    if (socket != null) {
+                        workerListener.onClientDisconnected(this);
+                        socket.close();
+                        socket = null;
+                    }
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -92,13 +97,8 @@ public class StreamWorker extends Thread {
         if (out == null || data == null) {
             return false;
         }
-        Message msg = new Message();
-        msg.arg1 = args[0];
-        if (args.length > 1) {
-            msg.arg2 = args[1];
-        }
-        msg.obj = data;
-        handler.sendMessage(msg);
+
+        Message.obtain(handler, UNUSED, args[0], args.length > 1 ? args[1] : UNUSED, data).sendToTarget();
         return true;
     }
 
@@ -111,19 +111,22 @@ public class StreamWorker extends Thread {
 
             try {
                 listener.onClientConnected(this);
+                loop:
                 while (running) {
                     StreamId key = StreamId.byId(in.read());
                     switch (key) {
                         case CONTROL:
-                            processCommand();
-                            break;
+                            if (processCommand()) {
+                                break;
+                            }
+                            // fall through to break loop
                         case END_OF_STREAM:
-                            stopWorker();
-                            break;
+                            break loop;
                     }
                 }
             } catch (Exception e) {
-                Log.e(LOG_TAG, "Error occurred while reading input", e);
+                Log.w(LOG_TAG, "Worker loop interrupted", e);
+            } finally {
                 stopWorker();
             }
         } catch (IOException e) {
@@ -132,9 +135,11 @@ public class StreamWorker extends Thread {
         }
     }
 
-    private void processCommand() {
+    private boolean processCommand() {
         try {
-            Command cmd = Command.byId(in.read());
+            int cmdId = in.read();
+            Command cmd = Command.byId(cmdId);
+            readData(in);
             switch (cmd) {
                 case FLASHLIGHT:
                     //ToDo: process explicit state
@@ -143,16 +148,16 @@ public class StreamWorker extends Thread {
                 case CAPS:
                     workerListener.reportCaps(this);
                     break;
+                case END_OF_STREAM:
+                    return false;
                 default:
-                    //ToDo: update protocol to include data len even if there's no data
-                    // - skip data block for unknown commands
-                    // - recognize END_OF_STREAM
-                    listener.onError(this, UNKNOWN_COMMAND, cmd.aux);
+                    listener.onError(this, UNKNOWN_COMMAND, cmdId);
                     break;
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.e(LOG_TAG, "Error reading command ID", e);
         }
+        return true;
     }
 
     interface WorkerEventListener {

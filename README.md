@@ -17,6 +17,7 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [x] Server: SSDP based port mapping over UPnP
 ## Phase #1 - «Stabilization»
 - [ ] Create app icons
+- [ ] Add string localizations
 - [ ] Remaster enums via `@IntDef` or static `byte`->value maps
 - [ ] Refactor `Message` acquisition via `obtain()`
 - [ ] Secure transport layer

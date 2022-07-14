@@ -39,6 +39,7 @@ public class StreamingServer extends Thread {
         @Override
         public void reportCaps(StreamWorker worker) {
             serverListener.notifyTorchMode();
+            serverListener.notifyAvailability();
 
             //ToDo: report all caps:
             //  cams:List<
@@ -145,6 +146,8 @@ public class StreamingServer extends Thread {
         void onToggleFlashlight();
 
         void notifyTorchMode();
+
+        void notifyAvailability();
 
         void onError(StreamWorker worker, Situation situation, Object details);
     }

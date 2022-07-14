@@ -30,10 +30,11 @@ public class Protocol {
                 if (isCommand) {
                     out.write(msg.arg2);
                 }
+
+                ByteBuffer buf = ByteBuffer.allocate(SIZEOF_INT);
+                buf.putInt(dataLen);
+                out.write(buf.array());
                 if (dataLen > 0) {
-                    ByteBuffer buf = ByteBuffer.allocate(SIZEOF_INT);
-                    buf.putInt(dataLen);
-                    out.write(buf.array());
                     out.write((byte[]) msg.obj);
                 }
                 return true;

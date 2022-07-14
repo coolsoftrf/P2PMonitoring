@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">P2P Camera</string>
     <string name="menu_settings">Settings</string>
+    <string name="gateways_discovered">Gateways discovered: %d</string>
     <string name="client_count">Clients connected: %d</string>
     <string name="unknown_command">Unknown command: %d</string>
     <string name="unknown_error">Unknown error: %d</string>
