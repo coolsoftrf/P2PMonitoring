@@ -305,7 +305,7 @@ public class MainActivity extends AppCompatActivity {
                 mCameras[id] = new CameraService(cameraID);
             }
         } catch (CameraAccessException e) {
-            Log.e(LOG_TAG, e.getMessage());
+            Log.e(LOG_TAG, "Camera initialization error", e);
             e.printStackTrace();
         }
     }
@@ -622,7 +622,7 @@ public class MainActivity extends AppCompatActivity {
                     mCameraManager.openCamera(mCameraID, mCameraCallback, mBackgroundHandler);
                 }
             } catch (CameraAccessException e) {
-                Log.i(LOG_TAG, e.getMessage());
+                Log.i(LOG_TAG, "Error opening camera", e);
             }
         }
 
