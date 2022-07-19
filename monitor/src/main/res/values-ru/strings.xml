@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">P2P Монитор</string>
+    <string name="ip_address_hint">Адрес сервера</string>
+    <string name="connect_button">Подключиться</string>
+    <string name="cancel_connection_button">Отмена</string>
+    <string name="disconnect_button">Отключиться</string>
+    <string name="torch_on_button">Подсветка: вкл</string>
+    <string name="torch_off_button">Подсветка: выкл</string>
+    <string name="torch_unavailable">Подсветка</string>
+    <string name="dummy_button">заглушка</string>
+    <string name="already_running">Сокет уже запущег</string>
+    <string name="address_null">Адрес не может быть пустым</string>
+    <string name="unknown_command">Неизвестная команда: %d</string>
+    <string name="invalid_command">Неверная команда %1$s, аргументы: %2$s</string>
+    <string name="malformed_command">У команды %1$s неверный аргумент: %2$s</string>
+</resources>

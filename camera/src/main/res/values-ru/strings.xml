@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">P2P Камера</string>
+    <string name="menu_settings">Настройки</string>
+    <string name="gateways_discovered">Обнаружены шлюзы: %d</string>
+    <string name="client_count">Подключено клиентов: %d</string>
+    <string name="unknown_command">Неизвестная команда: %d</string>
+    <string name="unknown_error">Неизвестная ошибка: %d</string>
+    <string name="binding_info">Интерфейс %s</string>
+    <string name="mapping_info">Доступен извне на %s:%d</string>
+    <string name="already_mapped_info">Адрес %s:%d уже занят устройством %s</string>
+    <string name="mapping_error">Ошибка проброса порта: %s</string>
+</resources>

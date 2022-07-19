@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">P2P Monitor</string>
-    <string name="ip_address_hint">Server IP address</string>
+    <string name="ip_address_hint">Server address</string>
     <string name="connect_button">Connect</string>
     <string name="cancel_connection_button">Cancel</string>
     <string name="disconnect_button">Disconnect</string>

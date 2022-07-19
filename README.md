@@ -16,8 +16,8 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [ ] ~~Server: Port mapping over NAT-PMP~~ (doesn't work with my router)
 - [x] Server: SSDP based port mapping over UPnP
 ## Phase #1 - «Stabilization»
-- [ ] Create app icons
-- [ ] Add string localizations
+- [x] Create app icons
+- [x] Add string localizations
 - [ ] Remaster enums via `@IntDef` or static `byte`->value maps
 - [x] Refactor `Message` acquisition via `obtain()`
 - [ ] Secure transport layer
@@ -25,15 +25,17 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [ ] Client: control frame rotation
 - [ ] Protocol: capture (high-res) photo
 - [ ] Server: stop encoder when last client disconnects
-- [ ] Server: detection of connection drops/switchovers/IP renewals etc.
+- [ ] Server: detect connection drops/switchovers/IP renewals etc.
 - [ ] Server: periodic port mapping check and refresh
 - [ ] Fix image freezes 
 ## Phase #2 - «Camera controls»
 - [ ] Server: collect map of cameras to their characteristics
+- [ ] Server: screen dimming with configurable timeout
 - [ ] Protocol: choose desired camera
 - [ ] Protocol: choose camera resolution
 - [ ] Protocol: choose AF/MF
 ## Phase #3 - «UX»
+- [ ] Client & Server color themes
 - [ ] Client: action icons
 - [ ] Client: rotate icons instead of screen orientation
 - [ ] Server: client statistics (address, connection time, etc.)
