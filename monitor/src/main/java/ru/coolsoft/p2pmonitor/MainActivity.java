@@ -32,6 +32,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -202,7 +203,11 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     case AVAILABILITY:
                         if (checkParameters(command, 2, data)) {
-                            setCameraControlsAvailability(data[1] == CAMERA_AVAILABLE);
+                            ByteBuffer buffer = ByteBuffer.wrap(data);
+                            byte[] idBytes = new byte[buffer.getInt()];
+                            String cameraId = new String(idBytes, StandardCharsets.UTF_8);
+                            //ToDo: process availability by id
+                            setCameraControlsAvailability(buffer.get() == CAMERA_AVAILABLE);
                         }
                         break;
                     case FORMAT: {

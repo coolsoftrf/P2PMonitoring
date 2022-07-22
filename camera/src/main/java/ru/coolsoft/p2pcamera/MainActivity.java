@@ -62,12 +62,16 @@ import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Flashlight;
@@ -79,8 +83,8 @@ public class MainActivity extends AppCompatActivity {
     public static final int REQUEST_CODE_CAMERA = 1;
 
     private CameraManager mCameraManager = null;
-    CameraService[] mCameras = null;
-    private final int DEFAULT_CAMERA_IDX = 0;
+    private Map<String, CameraService> mCameras = null;
+    private final String DEFAULT_CAMERA_ID = "0";
 
     private boolean torchAvailable = true;
     private boolean torchMode = false;
@@ -89,11 +93,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView mBindingInfoText = null;
     private TextView mExternalInfoText = null;
     private TextView mInfoText = null;
-
-    private MediaCodec mCodec = null;
-    Surface mEncoderSurface;
-    public static Surface surface = null;
-    private final List<byte[]> csdBuffers = new ArrayList<>();
 
     private HandlerThread mBackgroundThread;
     private Handler mBackgroundHandler = null;
@@ -150,9 +149,10 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onClientConnected(StreamWorker worker) {
             clients.add(new ClientInfo(worker));
+            ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::setUpMediaCodec);
             refreshClientCounter();
 
-            byte[] csdData = getCodecSpecificDataArray();
+            byte[] csdData = getCodecSpecificDataArray(DEFAULT_CAMERA_ID);
             if (csdData != null && csdData.length > 0) {
                 worker.notifyClient(FORMAT, csdData);
             }
@@ -161,14 +161,21 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onClientDisconnected(StreamWorker worker) {
             clients.remove(new ClientInfo(worker));
+            ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+                if (clients.isEmpty()) {
+                    camera.stopMediaStreaming();
+                }
+            });
             refreshClientCounter();
         }
 
         @Override
         public void onToggleFlashlight() {
-            if (torchAvailable && isCameraInitialized()) {
-                mCameras[DEFAULT_CAMERA_IDX].setFlashMode(!torchMode);
-                onTorchModeChanged(!torchMode);
+            if (torchAvailable) {
+                ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+                    camera.setFlashMode(!torchMode);
+                    onTorchModeChanged(!torchMode);
+                });
             }
         }
 
@@ -182,11 +189,11 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void notifyAvailability() {
-            streamingServer.notifyClients(AVAILABILITY, new byte[]{DEFAULT_CAMERA_IDX,
-                    (byte) (isCameraInitialized() && mCameras[DEFAULT_CAMERA_IDX].isOpen()
-                            ? CAMERA_AVAILABLE
-                            : CAMERA_UNAVAILABLE)
-            });
+            ByteBuffer buf = getCameraIdByteBuffer(DEFAULT_CAMERA_ID);
+            buf.put(ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::isOpen, false)
+                    ? CAMERA_AVAILABLE
+                    : CAMERA_UNAVAILABLE);
+            streamingServer.notifyClients(AVAILABILITY, buf.array());
         }
 
         @Override
@@ -204,12 +211,23 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    @NonNull
+    private static ByteBuffer getCameraIdByteBuffer(String cameraId) {
+        byte[] cameraIdBytes = cameraId.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buf = ByteBuffer.allocate(SIZEOF_INT + cameraIdBytes.length + 1);
+        buf.putInt(cameraIdBytes.length);
+        buf.put(cameraIdBytes);
+        return buf;
+    }
+
     @Nullable
-    private byte[] getCodecSpecificDataArray() {
+    private byte[] getCodecSpecificDataArray(String cameraId) {
         ByteArrayOutputStream csdData = new ByteArrayOutputStream();
         ByteBuffer len = ByteBuffer.allocate(SIZEOF_INT);
+
         try {
-            for (byte[] csd : csdBuffers) {
+            final List<byte[]> emptyByteArrayList = Collections.emptyList();
+            for (byte[] csd : ifCameraInitialized(cameraId, CameraService::getCsdBuffers, emptyByteArrayList)) {
                 len.clear();
                 len.putInt(csd.length);
                 csdData.write(len.array());
@@ -233,14 +251,51 @@ public class MainActivity extends AppCompatActivity {
         mExternalInfoText = binding.externalInfoText;
         mBindingInfoText = binding.localBinding;
 
+        mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+            @Override
+            public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
+                ifCameraInitialized(DEFAULT_CAMERA_ID,
+                        camera -> camera.configureTextures(mTextureView.getSurfaceTexture()));
+            }
+
+            @Override
+            public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
+            }
+
+            @Override
+            public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
+                Log.d(LOG_TAG, "texture destroyed");
+                ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+                    if (camera.isOpen()) {
+                        camera.pendingSurfaces.remove((Surface) mTextureView.getTag(R.id.TAG_KEY_SURFACE));
+                        camera.configureTextures(null);
+                    }
+                });
+
+                return true;
+            }
+
+            @Override
+            public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
+            }
+        });
+
+        startBackgroundThread();
         setupServer();
         setupCamera();
-        setUpMediaCodec();
     }
 
     @Override
     protected void onDestroy() {
         streamingServer.stopServer();
+
+        ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+            if (camera.isOpen()) {
+                camera.closeCamera();
+            }
+        });
+        stopBackgroundThread();
+
         super.onDestroy();
     }
 
@@ -251,28 +306,26 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
-    @Override
-    protected void onPause() {
-        if (isCameraInitialized() && mCameras[DEFAULT_CAMERA_IDX].isOpen()) {
-            mCameras[DEFAULT_CAMERA_IDX].closeCamera();
-        }
-
-        stopBackgroundThread();
-        super.onPause();
+    private <T> T ifCameraInitialized(String cameraId, CameraFunction<T> function, T otherwise) {
+        CameraService camera;
+        return mCameras != null && (camera = mCameras.get(cameraId)) != null
+                ? function.call(camera)
+                : otherwise;
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        startBackgroundThread();
-
-        if (isCameraInitialized() && !mCameras[DEFAULT_CAMERA_IDX].isOpen()) {
-            mCameras[DEFAULT_CAMERA_IDX].openCamera();
-        }
+    private interface CameraFunction<T> {
+        T call(CameraService camera);
     }
 
-    private boolean isCameraInitialized() {
-        return mCameras != null && mCameras[DEFAULT_CAMERA_IDX] != null;
+    private void ifCameraInitialized(String cameraId, CameraConsumer consumer) {
+        ifCameraInitialized(cameraId, camera -> {
+            consumer.consume(camera);
+            return null;
+        }, null);
+    }
+
+    private interface CameraConsumer {
+        void consume(CameraService camera);
     }
 
     @Override
@@ -289,24 +342,23 @@ public class MainActivity extends AppCompatActivity {
     private void initCamera() {
         mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
         try {
-            if (!mCameraManager.getCameraCharacteristics(Integer.toString(DEFAULT_CAMERA_IDX)).get(FLASH_INFO_AVAILABLE)) {
+            if (!mCameraManager.getCameraCharacteristics(DEFAULT_CAMERA_ID).get(FLASH_INFO_AVAILABLE)) {
                 onTorchUnavailable();
             }
         } catch (CameraAccessException e) {
-            e.printStackTrace();
+            Log.e(LOG_TAG, "failed to obtain characteristics during camera initialization", e);
         }
 
         try {
-            mCameras = new CameraService[mCameraManager.getCameraIdList().length];
+            final String[] cameras = mCameraManager.getCameraIdList();
+            mCameras = new HashMap<>(cameras.length);
 
-            for (String cameraID : mCameraManager.getCameraIdList()) {
+            for (String cameraID : cameras) {
                 Log.i(LOG_TAG, "cameraID: " + cameraID);
-                int id = Integer.parseInt(cameraID);
-                mCameras[id] = new CameraService(cameraID);
+                mCameras.put(cameraID, new CameraService(cameraID));
             }
         } catch (CameraAccessException e) {
             Log.e(LOG_TAG, "Camera initialization error", e);
-            e.printStackTrace();
         }
     }
 
@@ -348,36 +400,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void setUpMediaCodec() {
-        try {
-            mCodec = MediaCodec.createEncoderByType(MIMETYPE_VIDEO_AVC); // H264
-        } catch (Exception e) {
-            Log.i(LOG_TAG, "codec missing");
-            return;
-        }
-
-        int width = 320;
-        int height = 240;
-        int colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface;
-        int videoBitrate = 500000;
-        int videoFramePerSecond = 20;
-        int iframeInterval = 3;
-
-        MediaFormat format = MediaFormat.createVideoFormat(MIMETYPE_VIDEO_AVC, width, height);
-        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
-        format.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
-        format.setInteger(MediaFormat.KEY_FRAME_RATE, videoFramePerSecond);
-        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iframeInterval);
-
-        mCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        mEncoderSurface = mCodec.createInputSurface();
-
-        mCodec.setCallback(new EncoderCallback());
-        mCodec.start();
-        Log.i(LOG_TAG, "encoder started");
-    }
-
-
     private void startBackgroundThread() {
         mBackgroundThread = new HandlerThread("CameraBackground");
         mBackgroundThread.start();
@@ -391,7 +413,7 @@ public class MainActivity extends AppCompatActivity {
             mBackgroundThread = null;
             mBackgroundHandler = null;
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            Log.e(LOG_TAG, "background thread interrupted", e);
         }
     }
 
@@ -401,8 +423,17 @@ public class MainActivity extends AppCompatActivity {
         private CameraCaptureSession mSession;
         private CaptureRequest.Builder mPreviewBuilder;
 
+        private MediaCodec mCodec = null;
+        private Surface mEncoderSurface;
+        public final Set<Surface> pendingSurfaces = new HashSet<>();
+        private final List<byte[]> csdBuffers = new ArrayList<>();
+
         public CameraService(String cameraID) {
             mCameraID = cameraID;
+        }
+
+        public List<byte[]> getCsdBuffers() {
+            return csdBuffers;
         }
 
         private final CameraDevice.StateCallback mCameraCallback = new CameraDevice.StateCallback() {
@@ -410,9 +441,9 @@ public class MainActivity extends AppCompatActivity {
             public void onOpened(CameraDevice camera) {
                 mCameraDevice = camera;
                 Log.i(LOG_TAG, "Open camera  with id:" + mCameraDevice.getId());
-                streamingServer.notifyClients(AVAILABILITY, new byte[]{DEFAULT_CAMERA_IDX, CAMERA_AVAILABLE});
-
-                startCameraPreviewSession();
+                streamingServer.notifyClients(AVAILABILITY,
+                        getCameraIdByteBuffer(DEFAULT_CAMERA_ID).put(CAMERA_AVAILABLE).array());
+                updatePreviewSession();
             }
 
             @Override
@@ -423,7 +454,8 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onClosed(@NonNull CameraDevice camera) {
-                streamingServer.notifyClients(AVAILABILITY, new byte[]{DEFAULT_CAMERA_IDX, CAMERA_UNAVAILABLE});
+                streamingServer.notifyClients(AVAILABILITY,
+                        getCameraIdByteBuffer(DEFAULT_CAMERA_ID).put(CAMERA_UNAVAILABLE).array());
             }
 
             @Override
@@ -521,38 +553,70 @@ public class MainActivity extends AppCompatActivity {
             setRepeatingRequest();
         }
 
-        private synchronized void configureTexture() {
-            CameraCharacteristics cameraCharacteristics;
-            if (mCameraDevice == null) {
-                //camera was closed before we managed to get here
+        private synchronized void configureTextures(SurfaceTexture texture) {
+            if (texture != null) {
+                CameraCharacteristics cameraCharacteristics;
+                try {
+                    cameraCharacteristics = mCameraManager.getCameraCharacteristics(mCameraID);
+                } catch (CameraAccessException e) {
+                    Log.e(LOG_TAG, "failed to obtain characteristics during texture configuration", e);
+                    return;
+                }
+                Log.d(LOG_TAG, "texture initialization started");
+                StreamConfigurationMap previewConfig = cameraCharacteristics.get(SCALER_STREAM_CONFIGURATION_MAP);
+
+                int[] formats = previewConfig.getOutputFormats();
+                Size previewSize = previewConfig.getOutputSizes(formats[0])[0];
+
+                final int rotation = getWindowManager().getDefaultDisplay().getRotation();
+                Log.d(LOG_TAG, "Current Rotation: " + rotation);
+                Matrix m = computeTransformationMatrix(mTextureView, cameraCharacteristics, previewSize, rotation);
+                runOnUiThread(() -> mTextureView.setTransform(m));
+
+                texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
+                Surface surface = new Surface(texture);
+                mTextureView.setTag(R.id.TAG_KEY_SURFACE, surface);
+                pendingSurfaces.add(surface);
+            }
+            updatePreviewSession();
+        }
+
+        private void updatePreviewSession() {
+            if (mSession != null) {
+                try {
+                    mSession.stopRepeating();
+                } catch (CameraAccessException e) {
+                    Log.e(LOG_TAG, "Error stopping capture session", e);
+                }
+                mSession = null;
+                //restart the session within mSession.StateCallback.onReady
                 return;
             }
-            try {
-                cameraCharacteristics = mCameraManager.getCameraCharacteristics(mCameraID);
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
+            if (pendingSurfaces.size() == 0) {
                 return;
             }
-            StreamConfigurationMap previewConfig = cameraCharacteristics.get(SCALER_STREAM_CONFIGURATION_MAP);
-
-            int[] formats = previewConfig.getOutputFormats();
-            Size previewSize = previewConfig.getOutputSizes(formats[0])[0];
-
-            final int rotation = getWindowManager().getDefaultDisplay().getRotation();
-            Log.w(LOG_TAG, "Current Rotation: " + rotation);
-            Matrix m = computeTransformationMatrix(mTextureView, cameraCharacteristics, previewSize, rotation);
-            runOnUiThread(() -> mTextureView.setTransform(m));
-
-            SurfaceTexture texture = mTextureView.getSurfaceTexture();
-            texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
-            surface = new Surface(texture);
 
             try {
+                if (!ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+                    if (!camera.isOpen()) {
+                        camera.openCamera();
+
+                        //restart the session within camera:onOpened
+                        return false;
+                    }
+                    return true;
+                }, false)) {
+                    return;
+                }
+
                 mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-                mPreviewBuilder.addTarget(surface);
-                mPreviewBuilder.addTarget(mEncoderSurface);
+                final List<Surface> surfaces = new ArrayList<>(pendingSurfaces.size());
+                for (Surface surface : pendingSurfaces) {
+                    mPreviewBuilder.addTarget(surface);
+                    surfaces.add(surface);
+                }
 
-                mCameraDevice.createCaptureSession(Arrays.asList(surface, mEncoderSurface),
+                mCameraDevice.createCaptureSession(surfaces,
                         new CameraCaptureSession.StateCallback() {
                             @Override
                             public void onConfigured(CameraCaptureSession session) {
@@ -567,11 +631,19 @@ public class MainActivity extends AppCompatActivity {
                             }
 
                             @Override
+                            public void onReady(@NonNull CameraCaptureSession session) {
+                                if (mSession == null) {
+                                    // requests are being stopped to recreate a session with pending surfaces
+                                    updatePreviewSession();
+                                }
+                            }
+
+                            @Override
                             public void onConfigureFailed(CameraCaptureSession session) {
                             }
                         }, mBackgroundHandler);
             } catch (CameraAccessException e) {
-                e.printStackTrace();
+                Log.e(LOG_TAG, "failed to create preview", e);
             }
         }
 
@@ -579,35 +651,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 mSession.setRepeatingRequest(mPreviewBuilder.build(), null, mBackgroundHandler);
             } catch (CameraAccessException e) {
-                e.printStackTrace();
-            }
-        }
-
-        private void startCameraPreviewSession() {
-            if (mTextureView.isAvailable()) {
-                configureTexture();
-            } else {
-                mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-                    @Override
-                    public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
-                        configureTexture();
-                    }
-
-                    @Override
-                    public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-
-                    }
-
-                    @Override
-                    public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
-                        return false;
-                    }
-
-                    @Override
-                    public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
-
-                    }
-                });
+                Log.e(LOG_TAG, "failed to start preview", e);
             }
         }
 
@@ -634,67 +678,104 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        //ToDo: call it on last client disconnection
-        public void stopStreamingVideo() {
-            if (isOpen() & mCodec != null) {
-                try {
-                    mSession.stopRepeating();
-                    mSession.abortCaptures();
-                } catch (CameraAccessException e) {
-                    e.printStackTrace();
-                }
+        private void setUpMediaCodec() {
+            //ToDo: add race condition handling
+            if (mCodec != null) {
+                return;
+            }
 
+            Log.i(LOG_TAG, "starting encoder");
+            try {
+                mCodec = MediaCodec.createEncoderByType(MIMETYPE_VIDEO_AVC); // H264
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "codec missing");
+                return;
+            }
+
+            int width = 320;
+            int height = 240;
+            int colorFormat = MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface;
+            int videoBitrate = 500000;
+            int videoFramePerSecond = 20;
+            int iframeInterval = 3;
+
+            MediaFormat format = MediaFormat.createVideoFormat(MIMETYPE_VIDEO_AVC, width, height);
+            format.setInteger(MediaFormat.KEY_COLOR_FORMAT, colorFormat);
+            format.setInteger(MediaFormat.KEY_BIT_RATE, videoBitrate);
+            format.setInteger(MediaFormat.KEY_FRAME_RATE, videoFramePerSecond);
+            format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iframeInterval);
+
+            mCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            mEncoderSurface = mCodec.createInputSurface();
+            mCodec.setCallback(mEncoderCallback);
+            mCodec.start();
+
+            pendingSurfaces.add(mEncoderSurface);
+            configureTextures(null);
+            Log.i(LOG_TAG, "encoder started");
+        }
+
+        //ToDo: call it on last client disconnection
+        public void stopMediaStreaming() {
+            if (mCodec != null) {
+                Log.i(LOG_TAG, "stopping encoder");
+
+                ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+                    camera.pendingSurfaces.remove(mEncoderSurface);
+                    camera.configureTextures(null);
+                });
                 mCodec.stop();
                 mCodec.release();
+                mCodec = null;
                 mEncoderSurface.release();
-                closeCamera();
+                Log.i(LOG_TAG, "encoder stopped");
             }
         }
-    }
 
-    private class EncoderCallback extends MediaCodec.Callback {
-        @Override
-        public void onInputBufferAvailable(MediaCodec codec, int index) {
+        private final MediaCodec.Callback mEncoderCallback = new MediaCodec.Callback() {
+            @Override
+            public void onInputBufferAvailable(MediaCodec codec, int index) {
 
-        }
+            }
 
-        @Override
-        public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
-            ByteBuffer outByteBuffer = codec.getOutputBuffer(index);
-            long now = System.currentTimeMillis();
-            byte[] outData = new byte[SIZEOF_LONG + info.size];
-            ByteBuffer outDataBuffer = ByteBuffer.wrap(outData);
+            @Override
+            public void onOutputBufferAvailable(MediaCodec codec, int index, MediaCodec.BufferInfo info) {
+                ByteBuffer outByteBuffer = codec.getOutputBuffer(index);
+                long now = System.currentTimeMillis();
+                byte[] outData = new byte[SIZEOF_LONG + info.size];
+                ByteBuffer outDataBuffer = ByteBuffer.wrap(outData);
 
-            outDataBuffer.putLong(now);
-            outDataBuffer.put(outByteBuffer);
+                outDataBuffer.putLong(now);
+                outDataBuffer.put(outByteBuffer);
 
-            streamingServer.streamToClients(outData);
+                streamingServer.streamToClients(outData);
 
-            codec.releaseOutputBuffer(index, false);
-        }
+                codec.releaseOutputBuffer(index, false);
+            }
 
-        @Override
-        public void onError(MediaCodec codec, MediaCodec.CodecException e) {
-            Log.i(LOG_TAG, "Error: " + e);
-        }
+            @Override
+            public void onError(MediaCodec codec, MediaCodec.CodecException e) {
+                Log.i(LOG_TAG, "Error: " + e);
+            }
 
-        @Override
-        public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
-            Log.i(LOG_TAG, "encoder output format changed: " + format);
-            csdBuffers.clear();
-            for (String csdKey : new String[]{"csd-0", "csd-1", "csd-2"}) {
-                ByteBuffer buffer = format.getByteBuffer(csdKey);
-                if (buffer == null || !buffer.hasRemaining()) {
-                    break;
+            @Override
+            public void onOutputFormatChanged(MediaCodec codec, MediaFormat format) {
+                Log.i(LOG_TAG, "encoder output format changed: " + format);
+                csdBuffers.clear();
+                for (String csdKey : new String[]{"csd-0", "csd-1", "csd-2"}) {
+                    ByteBuffer buffer = format.getByteBuffer(csdKey);
+                    if (buffer == null || !buffer.hasRemaining()) {
+                        break;
+                    }
+                    csdBuffers.add(buffer.array());
                 }
-                csdBuffers.add(buffer.array());
-            }
 
-            byte[] csdData = getCodecSpecificDataArray();
-            if (csdData != null) {
-                streamingServer.notifyClients(FORMAT, csdData);
+                byte[] csdData = getCodecSpecificDataArray(mCameraID);
+                if (csdData != null) {
+                    streamingServer.notifyClients(FORMAT, csdData);
+                }
             }
-        }
+        };
     }
 
     private static class ClientInfo {

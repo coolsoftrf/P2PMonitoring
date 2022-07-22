@@ -13,7 +13,6 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [x] Client: media decoder
 - [x] Client: show decoded stream
 - [x] Protocol: flash management
-- [ ] ~~Server: Port mapping over NAT-PMP~~ (doesn't work with my router)
 - [x] Server: SSDP based port mapping over UPnP
 ## Phase #1 - «Stabilization»
 - [x] Create app icons
@@ -24,7 +23,7 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [ ] Create unit tests 
 - [ ] Client: control frame rotation
 - [ ] Protocol: capture (high-res) photo
-- [ ] Server: stop encoder when last client disconnects
+- [x] Server: stop encoder when last client disconnects
 - [ ] Server: detect connection drops/switchovers/IP renewals etc.
 - [ ] Server: periodic port mapping check and refresh
 - [ ] Fix image freezes 
@@ -35,7 +34,7 @@ This project is an attempt to create a peer-to-peer video monitoring system for 
 - [ ] Protocol: choose camera resolution
 - [ ] Protocol: choose AF/MF
 ## Phase #3 - «UX»
-- [ ] Client & Server color themes
+- [ ] Client & Server: color themes
 - [ ] Client: action icons
 - [ ] Client: rotate icons instead of screen orientation
 - [ ] Server: client statistics (address, connection time, etc.)

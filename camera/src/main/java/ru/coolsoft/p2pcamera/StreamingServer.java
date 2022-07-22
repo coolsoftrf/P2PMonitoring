@@ -133,7 +133,7 @@ public class StreamingServer extends Thread {
                 worker.start();
             }
         } catch (IOException e) {
-            Log.w(LOG_TAG, "I/O error occurred while waiting for a connection", e);
+            Log.i(LOG_TAG, "I/O interrupted while waiting for a connection", e);
         }
     }
 
