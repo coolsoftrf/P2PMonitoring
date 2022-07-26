@@ -4,13 +4,19 @@
     <string name="connect_button">Connect</string>
     <string name="cancel_connection_button">Cancel</string>
     <string name="disconnect_button">Disconnect</string>
+
+    <string name="rotate_ccw" translatable="false">\u21b3\u21b0</string>
+    <string name="rotate_cw" translatable="false">\u21b1\u21b2</string>
+
     <string name="torch_on_button">Torch: on</string>
     <string name="torch_off_button">Torch: off</string>
     <string name="torch_unavailable">Torch</string>
+
     <string name="dummy_button">dummy button</string>
     <string name="already_running">Client socket already running</string>
     <string name="address_null">Address can\'t be empty</string>
+
     <string name="unknown_command">Unknown command received: %d</string>
-    <string name="invalid_command">Invalid command %1$s received with %2$s arguments</string>
+    <string name="invalid_command">Invalid command %1$s received of length %2$s</string>
     <string name="malformed_command">Malformed command %1$s received with arguments: %2$s</string>
 </resources>

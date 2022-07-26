@@ -3,7 +3,6 @@ package ru.coolsoft.p2pmonitor;
 import static android.media.MediaFormat.KEY_HEIGHT;
 import static android.media.MediaFormat.KEY_WIDTH;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
-import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
 import static ru.coolsoft.common.Protocol.MEDIA_BUFFER_SIZE;
 
@@ -69,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final Handler mHideHandler = new Handler();
     private TextureView mTextureView;
+    private float textureRotation = 0;
 
     private MediaCodec mCodec = null;
     private final ByteArrayOutputStream mediaStream = new ByteArrayOutputStream(MEDIA_BUFFER_SIZE);
@@ -97,6 +97,7 @@ public class MainActivity extends AppCompatActivity {
     private ViewGroup mAvailabilityDependentControls;
     private Button mFlashButton;
     private TextView mTimestamp;
+
     private final Runnable mShowPart2Runnable = new Runnable() {
         @Override
         public void run() {
@@ -110,6 +111,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     };
+
     private boolean mVisible;
     private final Runnable mHideRunnable = this::hideConnectionControls;
 
@@ -174,9 +176,12 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onCommand(Command command, byte[] data) {
             runOnUiThread(() -> {
+                ByteBuffer buffer = ByteBuffer.wrap(data);
+                int len;
+
                 switch (command) {
                     case FLASHLIGHT:
-                        if (checkParameters(command, 1, data)) {
+                        if (checkDataLen(command, null, 1, data)) {
                             int txt;
                             Flashlight mode = Flashlight.getById(data[0]);
                             switch (mode) {
@@ -202,19 +207,22 @@ public class MainActivity extends AppCompatActivity {
                         }
                         break;
                     case AVAILABILITY:
-                        if (checkParameters(command, 2, data)) {
-                            ByteBuffer buffer = ByteBuffer.wrap(data);
-                            byte[] idBytes = new byte[buffer.getInt()];
+                        if (!checkDataLen(command, 4, null, data)) {
+                            break;
+                        }
+                        len = buffer.getInt();
+                        if (checkDataLen(command, null, 4 + len + 1, data)) {
+                            byte[] idBytes = new byte[len];
+                            buffer.get(idBytes);
                             String cameraId = new String(idBytes, StandardCharsets.UTF_8);
                             //ToDo: process availability by id
                             setCameraControlsAvailability(buffer.get() == CAMERA_AVAILABLE);
                         }
                         break;
                     case FORMAT: {
-                        ByteBuffer buffer = ByteBuffer.wrap(data);
                         List<byte[]> csdBuffers = new ArrayList<>();
                         while (buffer.hasRemaining()) {
-                            int len = buffer.getInt();
+                            len = buffer.getInt();
                             byte[] csd = new byte[len];
                             buffer.get(csd);
                             csdBuffers.add(csd);
@@ -223,14 +231,18 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     }
                     case UNDEFINED:
-                        Toast.makeText(MainActivity.this, getString(R.string.unknown_command, data[0]), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this,
+                                getString(R.string.unknown_command, data[0]),
+                                Toast.LENGTH_SHORT).show();
                 }
             });
         }
 
         @Override
         public void onError(Error situation, Throwable e) {
-            runOnUiThread(() -> Toast.makeText(MainActivity.this, situation.toString() + ": " + e.getMessage(), Toast.LENGTH_LONG).show());
+            runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                    situation.toString() + ": " + e.getMessage(),
+                    Toast.LENGTH_LONG).show());
             switch (situation) {
                 case HOST_UNRESOLVED_ERROR:
                 case SOCKET_INITIALIZATION_ERROR:
@@ -241,8 +253,10 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        private boolean checkParameters(Command command, int expectedCount, byte[] data) {
-            if (data == null || data.length != expectedCount) {
+        private boolean checkDataLen(Command command, Integer countAtLeast, Integer countExact, byte[] data) {
+            if (data == null
+                    || (countAtLeast != null && data.length < countAtLeast)
+                    || (countExact != null && data.length != countExact)) {
                 Toast.makeText(MainActivity.this,
                         getString(R.string.invalid_command,
                                 command.toString(),
@@ -348,9 +362,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateTextureLayout(int parentWidth, int parentHeight) {
         float width, height;
+        boolean swap = textureRotation % 180 == 90;
         if (mCodec != null) {
-            width = mCodec.getInputFormat().getInteger(KEY_WIDTH);
-            height = mCodec.getInputFormat().getInteger(KEY_HEIGHT);
+            float w = mCodec.getInputFormat().getInteger(KEY_WIDTH);
+            float h = mCodec.getInputFormat().getInteger(KEY_HEIGHT);
+            if (swap) {
+                width = h;
+                height = w;
+            } else {
+                width = w;
+                height = h;
+            }
         } else {
             width = mTextureView.getMeasuredWidth();
             height = mTextureView.getMeasuredHeight();
@@ -359,23 +381,32 @@ public class MainActivity extends AppCompatActivity {
         ViewGroup.LayoutParams layoutParams = mTextureView.getLayoutParams();
         boolean layoutUpdateRequired;
         if ((float) parentWidth / (float) parentHeight > width / height) {
-            layoutUpdateRequired = setLayoutParams(layoutParams, (int) (parentHeight / height * width), MATCH_PARENT);
+            layoutUpdateRequired = setLayoutParams(layoutParams, (int) (parentHeight / height * width), parentHeight, swap);
         } else {
-            layoutUpdateRequired = setLayoutParams(layoutParams, MATCH_PARENT, (int) (parentWidth / width * height));
+            layoutUpdateRequired = setLayoutParams(layoutParams, parentWidth, (int) (parentWidth / width * height), swap);
         }
         if (layoutUpdateRequired) {
             mTextureView.setLayoutParams(layoutParams);
+            mTextureView.setRotation(textureRotation);
         }
     }
 
-    private boolean setLayoutParams(ViewGroup.LayoutParams params, int width, int height) {
+    private boolean setLayoutParams(ViewGroup.LayoutParams params, int width, int height, boolean swap) {
         boolean result = false;
-        if (params.width != width) {
-            params.width = width;
+        int w, h;
+        if (swap) {
+            w = height;
+            h = width;
+        } else {
+            w = width;
+            h = height;
+        }
+        if (params.width != w) {
+            params.width = w;
             result = true;
         }
-        if (params.height != height) {
-            params.height = height;
+        if (params.height != h) {
+            params.height = h;
             result = true;
         }
         return result;
@@ -403,17 +434,15 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-
                 }
 
                 @Override
                 public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
-                    return false;
+                    return true;
                 }
 
                 @Override
                 public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
-
                 }
             });
         }
@@ -427,7 +456,6 @@ public class MainActivity extends AppCompatActivity {
         for (int i = 0; i < csdBuffers.size(); i++) {
             format.setByteBuffer("csd-" + i, ByteBuffer.wrap(csdBuffers.get(i)));
         }
-        //ToDo: add a UI control to rotate the texture
 
         SurfaceTexture texture = mTextureView.getSurfaceTexture();
         texture.setDefaultBufferSize(width, height);
@@ -439,10 +467,43 @@ public class MainActivity extends AppCompatActivity {
         View textureParent = (View) (mTextureView.getParent());
         updateTextureLayout(textureParent.getMeasuredWidth(), textureParent.getMeasuredHeight());
 
-        mCodec.setCallback(new DecoderCallback());
+        mCodec.setCallback(mDecoderCallback);
         mCodec.start();
         Log.i(LOG_TAG, "decoder started");
     }
+
+    private final MediaCodec.Callback mDecoderCallback = new MediaCodec.Callback() {
+        @Override
+        public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
+            byte[] b;
+            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
+            inputBuffer.clear();
+            synchronized (mediaStream) {
+                b = mediaStream.toByteArray();
+                mediaStream.reset();
+            }
+            inputBuffer.put(b);
+
+            Log.v(LOG_TAG, String.format("processing %d bytes of media to buffer #%d", b.length, index));
+            mCodec.queueInputBuffer(index, 0, b.length, 0, 0);
+        }
+
+        @Override
+        public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
+            codec.releaseOutputBuffer(index, true);
+            Log.v(LOG_TAG, "output buffer released to surface");
+        }
+
+        @Override
+        public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {
+            Log.e(LOG_TAG, "decoder error", e);
+        }
+
+        @Override
+        public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
+
+        }
+    };
 
     private void toggle() {
         if (mVisible) {
@@ -519,36 +580,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class DecoderCallback extends MediaCodec.Callback {
-        @Override
-        public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
-            byte[] b;
-            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
-            inputBuffer.clear();
-            synchronized (mediaStream) {
-                b = mediaStream.toByteArray();
-                mediaStream.reset();
-            }
-            inputBuffer.put(b);
+    public void onCwClicked(View view) {
+        textureRotation = (textureRotation + 90) % 360;
+        mTextureView.getParent().requestLayout();
+    }
 
-            Log.v(LOG_TAG, String.format("processing %d bytes of media to buffer #%d", b.length, index));
-            mCodec.queueInputBuffer(index, 0, b.length, 0, 0);
-        }
-
-        @Override
-        public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
-            codec.releaseOutputBuffer(index, true);
-            Log.v(LOG_TAG, "output buffer released to surface");
-        }
-
-        @Override
-        public void onError(@NonNull MediaCodec codec, @NonNull MediaCodec.CodecException e) {
-            Log.e(LOG_TAG, "decoder error", e);
-        }
-
-        @Override
-        public void onOutputFormatChanged(@NonNull MediaCodec codec, @NonNull MediaFormat format) {
-
-        }
+    public void onCcwClicked(View view) {
+        textureRotation = (360 + textureRotation - 90) % 360;
+        mTextureView.getParent().requestLayout();
     }
 }
