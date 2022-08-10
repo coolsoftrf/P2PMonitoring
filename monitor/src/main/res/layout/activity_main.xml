@@ -54,6 +54,33 @@
                 tools:ignore="UsingOnClickInXml" />
 
             <LinearLayout
+                android:id="@+id/auth_controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <EditText
+                    android:id="@+id/login"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="username"
+                    android:hint="@string/login"
+                    android:inputType="text" />
+
+                <EditText
+                    android:id="@+id/password"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="password"
+                    android:hint="@string/password"
+                    android:inputType="textPassword" />
+
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/connection_progress"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -73,6 +100,7 @@
                     android:onClick="onCancelConnectionClicked"
                     android:text="@string/cancel_connection_button"
                     tools:ignore="UsingOnClickInXml" />
+
             </LinearLayout>
 
         </LinearLayout>

@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">P2P Monitor</string>
     <string name="ip_address_hint">Server address</string>
+    <string name="login">login</string>
+    <string name="password">password</string>
     <string name="connect_button">Connect</string>
     <string name="cancel_connection_button">Cancel</string>
     <string name="disconnect_button">Disconnect</string>
@@ -11,8 +13,13 @@
     <string name="torch_on_button">Torch: on</string>
     <string name="torch_off_button">Torch: off</string>
     <string name="torch_unavailable">Torch</string>
-
     <string name="dummy_button">dummy button</string>
+
+    <string name="empty_credentials">Credentials can\'t be empty</string>
+    <string name="wrong_credentials">Invalid login or password</string>
+    <string name="access_denied">Access denied</string>
+    <string name="sww">Something went wrong. Please try again</string>
+
     <string name="already_running">Client socket already running</string>
     <string name="address_null">Address can\'t be empty</string>
 

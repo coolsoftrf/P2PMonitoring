@@ -138,6 +138,9 @@ public class StreamingServer extends Thread {
     }
 
     public interface EventListener extends PortMappingServer.PortMappingListener {
+        void onUser(StreamWorker worker, String user);
+
+        void onShadow(StreamWorker worker, String shadow);
 
         void onClientConnected(StreamWorker worker);
 

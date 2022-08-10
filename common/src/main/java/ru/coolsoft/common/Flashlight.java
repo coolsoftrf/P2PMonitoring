@@ -1,27 +1,21 @@
 package ru.coolsoft.common;
 
+import ru.coolsoft.annotations.ById;
+import ru.coolsoft.annotations.ByIdDefault;
+import ru.coolsoft.annotations.ByIdRefField;
+
+@ById
 public enum Flashlight {
     OFF(0),
     ON(1),
     UNAVAILABLE(-1),
+    @ByIdDefault
     UNKNOWN(-2);
 
+    @ByIdRefField
     public final int mode;
 
     Flashlight(int modeId) {
         mode = modeId;
-    }
-
-    public static Flashlight getById(int id) {
-        switch (id) {
-            case 0:
-                return OFF;
-            case 1:
-                return ON;
-            case -1:
-                return UNAVAILABLE;
-            default:
-                return UNKNOWN;
-        }
     }
 }

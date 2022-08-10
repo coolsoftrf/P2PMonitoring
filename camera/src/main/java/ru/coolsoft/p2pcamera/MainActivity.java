@@ -4,10 +4,16 @@ import static android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABL
 import static android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP;
 import static ru.coolsoft.common.Command.AVAILABILITY;
 import static ru.coolsoft.common.Command.FORMAT;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_NOT_ALLOWED;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_WRONG_CREDENTIALS;
 import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
 import static ru.coolsoft.common.Constants.CAMERA_UNAVAILABLE;
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
 import static ru.coolsoft.common.Constants.SIZEOF_LONG;
+import static ru.coolsoft.p2pcamera.AuthorizationDialogFragment.ADDRESS_KEY;
+import static ru.coolsoft.p2pcamera.AuthorizationDialogFragment.RESULT_KEY;
+import static ru.coolsoft.p2pcamera.AuthorizationDialogFragment.USER_KEY;
 import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
 
 import android.Manifest;
@@ -40,6 +46,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.FragmentResultListener;
 
 import org.bitlet.weupnp.GatewayDevice;
 import org.bitlet.weupnp.PortMappingEntry;
@@ -50,6 +57,7 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -70,6 +78,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CODE_CAMERA = 1;
 
     private final String DEFAULT_CAMERA_ID = "0";
+    //ToDo: move clients
+    // - to service layer
     private final List<ClientInfo> clients = new ArrayList<>();
 
     private CameraManager mCameraManager = null;
@@ -196,6 +206,38 @@ public class MainActivity extends AppCompatActivity {
         return csdData.toByteArray();
     }
 
+    private final FragmentResultListener fragmentResultListener = (requestKey, result) -> {
+        if (!requestKey.equals(AuthorizationDialogFragment.RESULT_TAG)) {
+            return;
+        }
+
+        String user = result.getString(USER_KEY);
+        AuthorizationDialogFragment.Decision decision = (AuthorizationDialogFragment.Decision) result.getSerializable(RESULT_KEY);
+        Log.d(LOG_TAG, String.format("Authorization decision for user '%s' is '%s'", user, decision.toString()));
+
+        InetSocketAddress socketInfo = (InetSocketAddress) result.getSerializable(ADDRESS_KEY);
+        int clientIndex = clients.indexOf(new ClientInfo(socketInfo));
+        if (clientIndex == -1) {
+            Log.e(LOG_TAG, String.format("Failed to find stream worker for client %s", socketInfo));
+            return;
+        }
+        StreamWorker worker = clients.get(clientIndex).streamWorker;
+
+        SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
+        switch (decision) {
+            case ALLOW_ALWAYS:
+                sm.setUserAccess(user, SecurityManager.UserAccess.GRANTED);
+            case ALLOW:
+                worker.onAuthorized();
+                break;
+            case DENY_ALWAYS:
+                sm.setUserAccess(user, SecurityManager.UserAccess.DENIED);
+            case DENY:
+                worker.onAuthorizationFailed(AUTH_DENIED_NOT_ALLOWED);
+                break;
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -208,6 +250,9 @@ public class MainActivity extends AppCompatActivity {
         mBindingInfoText = binding.localBinding;
 
         mTextureView.setSurfaceTextureListener(surfaceTextureListener);
+
+        getSupportFragmentManager().setFragmentResultListener(
+                AuthorizationDialogFragment.RESULT_TAG, this, fragmentResultListener);
 
         startBackgroundThread();
         setupServer();
@@ -468,16 +513,68 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onClientConnected(StreamWorker worker) {
-            clients.add(new ClientInfo(worker));
+        public void onUser(StreamWorker worker, String user) {
+            ClientInfo clientInfo = new ClientInfo(worker);
+            int clientIndex = clients.indexOf(clientInfo);
+            if (clientIndex == -1) {
+                Log.w(LOG_TAG, String.format("Failed to find client for worker %s. Adding new one.",
+                        worker.getSocket().getRemoteSocketAddress()));
+                clients.add(clientInfo);
+            }
+            clients.get(clientIndex).setUserName(user);
+
+            SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
+            switch (sm.getUserAccess(user)) {
+                case GRANTED:
+                    worker.onAuthorized();
+                    break;
+                case DENIED:
+                    worker.onAuthorizationFailed(AUTH_DENIED_NOT_ALLOWED);
+                    break;
+                default:
+                    Socket socket = worker.getSocket();
+                    new AuthorizationDialogFragment(user, new InetSocketAddress(socket.getInetAddress(), socket.getPort()))
+                            .show(getSupportFragmentManager(), AuthorizationDialogFragment.TAG_PREFIX + user);
+            }
+        }
+
+        @Override
+        public void onShadow(StreamWorker worker, String shadow) {
+            ClientInfo clientInfo = new ClientInfo(worker);
+            int clientIndex = clients.indexOf(clientInfo);
+            if (clientIndex == -1) {
+                Log.e(LOG_TAG, String.format("Failed to find client for worker %s.",
+                        worker.getSocket().getRemoteSocketAddress()));
+                worker.onAuthorizationFailed(AUTH_DENIED_SERVER_ERROR);
+                return;
+            }
+
+            SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
+            String user = clients.get(clientIndex).getUserName();
+            String shadowPref = sm.getUserShadow(user);
+            if (shadowPref == null) {
+                Log.d(LOG_TAG, String.format("Shadow initialized for user '%s':%s", user, shadow));
+                sm.setUserShadow(user, shadow);
+            } else if (!shadowPref.equals(shadow)) {
+                Log.d(LOG_TAG, String.format("Access denied for user '%s':%s (against %s)", user, shadow, shadowPref));
+                worker.onAuthorizationFailed(AUTH_DENIED_WRONG_CREDENTIALS);
+                return;
+            }
+            worker.onAuthorized();
+
             ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::setUpMediaCodec);
-            refreshClientCounter();
 
             byte[] csdData = ifCameraInitialized(DEFAULT_CAMERA_ID,
                     camera -> getCodecSpecificDataArray(camera.getCsdBuffers()), null);
             if (csdData != null && csdData.length > 0) {
                 worker.notifyClient(FORMAT, csdData);
             }
+        }
+
+        @Override
+        public void onClientConnected(StreamWorker worker) {
+            clients.add(new ClientInfo(worker));
+            refreshClientCounter();
         }
 
         @Override
@@ -567,12 +664,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private static class ClientInfo {
-        private final InetAddress address;
-        private final long connectedTimestamp;
+        private final InetSocketAddress address;
+        @Nullable
+        public final Long connectedTimestamp;
+        public final StreamWorker streamWorker;
+
+        private String userName;
 
         private ClientInfo(StreamWorker worker) {
-            address = worker.getSocket().getInetAddress();
+            address = new InetSocketAddress(worker.getSocket().getInetAddress(), worker.getSocket().getPort());
             connectedTimestamp = System.currentTimeMillis();
+            streamWorker = worker;
+        }
+
+        private ClientInfo(InetSocketAddress socketInfo) {
+            address = socketInfo;
+            connectedTimestamp = null;
+            streamWorker = null;
         }
 
         @Override
@@ -586,6 +694,15 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public int hashCode() {
             return address.hashCode();
+        }
+
+        @Nullable
+        public String getUserName() {
+            return userName;
+        }
+
+        public void setUserName(String userName) {
+            this.userName = userName;
         }
     }
 }

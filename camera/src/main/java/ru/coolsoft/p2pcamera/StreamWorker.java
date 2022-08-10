@@ -1,8 +1,10 @@
 package ru.coolsoft.p2pcamera;
 
+import static ru.coolsoft.common.Constants.AUTH_OK;
 import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
 import static ru.coolsoft.common.Protocol.readData;
+import static ru.coolsoft.common.StreamId.AUTHENTICATION;
 import static ru.coolsoft.common.StreamId.CONTROL;
 import static ru.coolsoft.common.StreamId.MEDIA;
 import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
@@ -12,12 +14,16 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.util.Log;
 
+import androidx.annotation.Nullable;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 import ru.coolsoft.common.Command;
+import ru.coolsoft.common.Constants;
 import ru.coolsoft.common.StreamId;
 import ru.coolsoft.p2pcamera.StreamingServer.EventListener;
 
@@ -32,6 +38,15 @@ public class StreamWorker extends Thread {
     private InputStream in;
     private OutputStream out;
     private boolean running;
+
+    private enum AuthStage {
+        User,
+        Denied,
+        Shadow,
+        Verified
+    }
+
+    private AuthStage authStage = AuthStage.User;
 
     public StreamWorker(Socket socket, WorkerEventListener workerEventListener, EventListener eventListener) {
         this.socket = socket;
@@ -93,8 +108,31 @@ public class StreamWorker extends Thread {
         return sendData(buffer, MEDIA.id);
     }
 
+    public void onAuthorizationFailed(@Constants.AuthFailureCause int cause) {
+        authStage = AuthStage.Denied;
+        sendData(null, AUTHENTICATION.id, cause);
+//        stopWorker(); //Connection should be closed by client once notification is received
+    }
+
+    public void onAuthorized() {
+        switch (authStage) {
+            case User:
+                authStage = AuthStage.Shadow;
+                break;
+            case Shadow:
+                authStage = AuthStage.Verified;
+                break;
+            default:
+                //unexpected state
+                return;
+        }
+        sendData(null, AUTHENTICATION.id, AUTH_OK);
+    }
+
     private boolean sendData(byte[] data, int... args) {
-        if (out == null || data == null) {
+        if (out == null
+                || args.length == 0
+                || args[0] != StreamId.AUTHENTICATION.id && data == null) {
             return false;
         }
 
@@ -115,11 +153,16 @@ public class StreamWorker extends Thread {
                 while (running) {
                     StreamId key = StreamId.byId(in.read());
                     switch (key) {
-                        case CONTROL:
-                            if (processCommand()) {
-                                break;
+                        case AUTHENTICATION:
+                            if (!processAuth()) {
+                                break loop;
                             }
-                            // fall through to break loop
+                            break;
+                        case CONTROL:
+                            if (authStage != AuthStage.Verified || !processCommand()) {
+                                break loop;
+                            }
+                            break;
                         case END_OF_STREAM:
                             break loop;
                     }
@@ -133,6 +176,35 @@ public class StreamWorker extends Thread {
             Log.e(LOG_TAG, "I/O stream creation failed", e);
             e.printStackTrace();
         }
+    }
+
+    private boolean processAuth() {
+        //ToDo: wait until listener reports its decision
+        switch (authStage) {
+            case User:
+                listener.onUser(this, getAuthData());
+                return true;
+            case Shadow:
+                listener.onShadow(this, getAuthData());
+                return true;
+            case Verified:
+                //protocol violation
+            case Denied:
+                //access denied
+            default:
+                //whatever
+                return false;
+        }
+    }
+
+    @Nullable
+    private String getAuthData() {
+        byte[] bytes = readData(in);
+        if (bytes.length == 0) {
+            return null;
+        }
+
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     private boolean processCommand() {
@@ -161,8 +233,8 @@ public class StreamWorker extends Thread {
     }
 
     interface WorkerEventListener {
-        void onClientDisconnected(StreamWorker worker);
-
         void reportCaps(StreamWorker worker);
+
+        void onClientDisconnected(StreamWorker worker);
     }
 }

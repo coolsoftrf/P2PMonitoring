@@ -1,0 +1,23 @@
+plugins {
+    id 'java-library'
+}
+
+version = '0.0.1'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+compileJava {
+    options.with {
+        fork = true
+        compilerArgs.addAll([
+                '--add-exports', 'jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+                '--add-exports', 'jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED',
+                '--add-exports', 'jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+                '--add-exports', 'jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED',
+                '--add-exports', 'jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED'
+        ])
+    }
+}

@@ -1,11 +1,14 @@
 package ru.coolsoft.p2pmonitor;
 
+import static ru.coolsoft.common.Constants.AUTH_OK;
 import static ru.coolsoft.common.Constants.UNUSED;
+import static ru.coolsoft.common.Protocol.END_OF_STREAM;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
+import static ru.coolsoft.common.StreamId.AUTHENTICATION;
 import static ru.coolsoft.common.StreamId.CONTROL;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.AUTH_ERROR;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CLOSING;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.HOST_UNRESOLVED_ERROR;
-import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.IO_INITIALIZATION_ERROR;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.SOCKET_INITIALIZATION_ERROR;
 
 import android.os.Handler;
@@ -20,6 +23,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 import ru.coolsoft.common.Command;
@@ -39,6 +45,8 @@ public class StreamingClient extends Thread {
     private InputStream in;
     private OutputStream out;
 
+    private byte[] mSha;
+
     public StreamingClient(String address, EventListener listener) {
         serverAddress = address;
         eventListener = listener;
@@ -46,6 +54,23 @@ public class StreamingClient extends Thread {
         handlerThread = new HandlerThread(StreamingClient.class.getSimpleName());
         handlerThread.start();
         handler = new Handler(handlerThread.getLooper(), createSendRoutine(() -> out));
+    }
+
+    public void logIn(String login, String password) {
+        try {
+            mSha = MessageDigest.getInstance("SHA-256").digest(password.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException e) {
+            //impossible case for SHA-256 supported since API v1
+            e.printStackTrace();
+            terminate();
+            return;
+        }
+
+        sendAuth(login.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void sendAuth(byte[] authPart) {
+        Message.obtain(handler, UNUSED, AUTHENTICATION.id, UNUSED, authPart).sendToTarget();
     }
 
     public void sendCommand(Command command, byte[] data) {
@@ -58,7 +83,7 @@ public class StreamingClient extends Thread {
         try {
             address = InetAddress.getByName(serverAddress);
         } catch (UnknownHostException e) {
-            eventListener.onError(HOST_UNRESOLVED_ERROR, e);
+            eventListener.onError(HOST_UNRESOLVED_ERROR, null, e);
             e.printStackTrace();
             return;
         }
@@ -66,31 +91,46 @@ public class StreamingClient extends Thread {
         try {
             socket = new Socket();
             socket.connect(new InetSocketAddress(address, Defaults.SERVER_PORT));
+            in = socket.getInputStream();
+            out = socket.getOutputStream();
             eventListener.onConnected();
         } catch (IOException e) {
-            eventListener.onError(SOCKET_INITIALIZATION_ERROR, e);
+            eventListener.onError(SOCKET_INITIALIZATION_ERROR, null, e);
             e.printStackTrace();
             return;
         }
 
-        try {
-            in = socket.getInputStream();
-            out = socket.getOutputStream();
-        } catch (IOException e) {
-            eventListener.onError(IO_INITIALIZATION_ERROR, e);
-            e.printStackTrace();
-        }
-
+        boolean shaSent = false;
         try {
             loop:
             while (true) {
                 int streamId = in.read();
                 switch (StreamId.byId(streamId)) {
+                    case AUTHENTICATION:
+                        int result = in.read();
+                        switch (result){
+                            case AUTH_OK:
+                                if (!shaSent) {
+                                    sendAuth(mSha);
+                                    shaSent = true;
+                                } else {
+                                    eventListener.onAuthorized();
+                                }
+                                break;
+                            default:
+                                eventListener.onError(AUTH_ERROR, (byte) result, null);
+                                //fall through to break loop
+                            case END_OF_STREAM:
+                                break loop;
+                        }
+                        break;
+
                     case MEDIA: {
                         byte[] media = Protocol.readData(in);
                         eventListener.onMedia(media);
                         break;
                     }
+
                     case CONTROL: {
                         int cmdId = in.read();
                         Command cmd = Command.byId(cmdId);
@@ -132,7 +172,7 @@ public class StreamingClient extends Thread {
                 handlerThread = null;
             }
         } catch (IOException e) {
-            eventListener.onError(CLOSING, e);
+            eventListener.onError(CLOSING, null, e);
         }
         eventListener.onDisconnected();
     }
@@ -141,7 +181,7 @@ public class StreamingClient extends Thread {
         enum Error {
             HOST_UNRESOLVED_ERROR,
             SOCKET_INITIALIZATION_ERROR,
-            IO_INITIALIZATION_ERROR,
+            AUTH_ERROR,
             CLOSING
         }
 
@@ -149,12 +189,14 @@ public class StreamingClient extends Thread {
 
         void onDisconnected();
 
+        void onAuthorized();
+
         void onFormat(List<byte[]> csdBuffers);
 
         void onMedia(byte[] data);
 
         void onCommand(Command command, byte[] data);
 
-        void onError(Error situation, Throwable e);
+        void onError(Error situation, Byte aux, Throwable e);
     }
 }

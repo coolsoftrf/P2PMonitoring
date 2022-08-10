@@ -17,3 +17,4 @@ rootProject.name = "P2P Monitoring"
 include ':camera'
 include ':common'
 include ':monitor'
+include ':annotations'

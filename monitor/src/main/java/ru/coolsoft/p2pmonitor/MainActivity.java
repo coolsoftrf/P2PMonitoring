@@ -3,6 +3,10 @@ package ru.coolsoft.p2pmonitor;
 import static android.media.MediaFormat.KEY_HEIGHT;
 import static android.media.MediaFormat.KEY_WIDTH;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
+import static android.view.KeyEvent.KEYCODE_ENTER;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_NOT_ALLOWED;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_WRONG_CREDENTIALS;
 import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
 import static ru.coolsoft.common.Protocol.MEDIA_BUFFER_SIZE;
 
@@ -35,6 +39,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -93,6 +98,11 @@ public class MainActivity extends AppCompatActivity {
     private View mControlsView;
     private View mConnectButton;
     private View mConnectionProgress;
+
+    private View mAuthControls;
+    private EditText mLogin;
+    private EditText mPassword;
+
     private View mCameraControls;
     private ViewGroup mAvailabilityDependentControls;
     private Button mFlashButton;
@@ -134,26 +144,57 @@ public class MainActivity extends AppCompatActivity {
     };
 
     private StreamingClient client;
+
+    private final View.OnKeyListener onPasswordEditKeyListener = (v, keyCode, event) -> {
+        if (keyCode != KEYCODE_ENTER) {
+            return false;
+        }
+        mPassword.setOnKeyListener(null);
+
+        String login = mLogin.getText().toString();
+        String pwd = mPassword.getText().toString();
+        for (String str : Arrays.asList(login, pwd)) {
+            if (str.isEmpty()) {
+                Toast.makeText(this, R.string.empty_credentials, Toast.LENGTH_LONG).show();
+                return true;
+            }
+        }
+
+        client.logIn(login, pwd);
+        return true;
+    };
+
     private final StreamingClient.EventListener eventListener = new StreamingClient.EventListener() {
 
         @Override
         public void onConnected() {
             runOnUiThread(() -> {
-                hideConnectionControls();
-                restoreConnectControls();
-                mCameraControls.setVisibility(View.VISIBLE);
-                client.sendCommand(Command.CAPS, null);
+                mAuthControls.setVisibility(View.VISIBLE);
+                mPassword.setOnKeyListener(onPasswordEditKeyListener);
             });
         }
 
         @Override
         public void onDisconnected() {
             runOnUiThread(() -> {
+                mAuthControls.setVisibility(View.GONE);
                 mCameraControls.setVisibility(View.INVISIBLE);
                 client = null;
                 stopCodec();
+                restoreConnectControls();
                 showConnectionControls();
             });
+        }
+
+        @Override
+        public void onAuthorized() {
+            runOnUiThread(() -> {
+                hideConnectionControls();
+                restoreConnectControls();
+                mAuthControls.setVisibility(View.GONE);
+                mCameraControls.setVisibility(View.VISIBLE);
+            });
+            client.sendCommand(Command.CAPS, null);
         }
 
         @Override
@@ -183,7 +224,7 @@ public class MainActivity extends AppCompatActivity {
                     case FLASHLIGHT:
                         if (checkDataLen(command, null, 1, data)) {
                             int txt;
-                            Flashlight mode = Flashlight.getById(data[0]);
+                            Flashlight mode = Flashlight.byId(data[0]);
                             switch (mode) {
                                 case OFF:
                                     txt = R.string.torch_off_button;
@@ -239,17 +280,29 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onError(Error situation, Throwable e) {
-            runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                    situation.toString() + ": " + e.getMessage(),
-                    Toast.LENGTH_LONG).show());
+        public void onError(Error situation, Byte aux, Throwable e) {
+            String message;
+            if (situation == Error.AUTH_ERROR) {
+                switch (aux) {
+                    case AUTH_DENIED_WRONG_CREDENTIALS:
+                        message = getString(R.string.wrong_credentials);
+                        break;
+                    case AUTH_DENIED_NOT_ALLOWED:
+                        message = getString(R.string.access_denied);
+                        break;
+                    case AUTH_DENIED_SERVER_ERROR:
+                    default:
+                        message = getString(R.string.sww);
+                        break;
+                }
+            } else {
+                message = situation.toString() + ": " + e.getMessage();
+            }
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
             switch (situation) {
                 case HOST_UNRESOLVED_ERROR:
                 case SOCKET_INITIALIZATION_ERROR:
-                    restoreConnectControls();
-                    if (client != null) {
-                        client.terminate();
-                    }
+                    terminateSession();
             }
         }
 
@@ -274,10 +327,6 @@ public class MainActivity extends AppCompatActivity {
                 mCodec.release();
                 mCodec = null;
             }
-        }
-
-        private void restoreConnectControls() {
-            runOnUiThread(() -> setConnectionControlsVisibility(true));
         }
     };
 
@@ -320,6 +369,10 @@ public class MainActivity extends AppCompatActivity {
         mConnectionProgress = binding.connectionProgress;
         mConnectButton = binding.connectButton;
 
+        mAuthControls = binding.authControls;
+        mLogin = binding.login;
+        mPassword = binding.password;
+
         mCameraControls = binding.cameraControls;
         mFlashButton = binding.flashButton;
         mAvailabilityDependentControls = binding.availabilityDependentControls;
@@ -336,9 +389,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        if (client != null) {
-            client.terminate();
-        }
+        terminateSession();
         super.onDestroy();
     }
 
@@ -569,15 +620,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void onDisconnectClicked(View view) {
-        if (client != null) {
-            client.terminate();
-        }
+        terminateSession();
     }
 
     public void onCancelConnectionClicked(View view) {
-        if (client != null) {
-            client.terminate();
-        }
+        terminateSession();
     }
 
     public void onCwClicked(View view) {
@@ -588,5 +635,15 @@ public class MainActivity extends AppCompatActivity {
     public void onCcwClicked(View view) {
         textureRotation = (360 + textureRotation - 90) % 360;
         mTextureView.getParent().requestLayout();
+    }
+
+    private void restoreConnectControls() {
+        runOnUiThread(() -> setConnectionControlsVisibility(true));
+    }
+
+    private void terminateSession() {
+        if (client != null) {
+            client.terminate();
+        }
     }
 }

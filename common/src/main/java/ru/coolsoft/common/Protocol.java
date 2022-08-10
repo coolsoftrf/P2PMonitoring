@@ -1,7 +1,8 @@
 package ru.coolsoft.common;
 
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
-import static ru.coolsoft.common.StreamId.CONTROL;
+import static ru.coolsoft.common.Constants.UNUSED;
+import static ru.coolsoft.common.StreamId.AUTHENTICATION;
 
 import android.os.Handler;
 
@@ -17,7 +18,6 @@ public class Protocol {
     public static Handler.Callback createSendRoutine(Supplier<OutputStream> outputStreamSupplier) {
         return msg -> {
             try {
-                boolean isCommand = msg.arg1 == CONTROL.id;
                 int dataLen;
                 if (msg.obj != null) {
                     dataLen = ((byte[]) msg.obj).length;
@@ -27,8 +27,16 @@ public class Protocol {
 
                 OutputStream out = outputStreamSupplier.get();
                 out.write(msg.arg1);
-                if (isCommand) {
+                if (msg.arg2 != UNUSED
+/*
+                        && (msg.arg1 == CONTROL.id
+                        || msg.arg1 == AUTHENTICATION.id)
+*/
+                ) {
                     out.write(msg.arg2);
+                }
+                if (msg.arg1 == AUTHENTICATION.id && dataLen == 0) {
+                    return true;
                 }
 
                 ByteBuffer buf = ByteBuffer.allocate(SIZEOF_INT);
@@ -50,11 +58,13 @@ public class Protocol {
         readAllBytes(in, lenBuffer);
         int len = ByteBuffer.wrap(lenBuffer).getInt();
 
+        //FixMe: security gap - block too large array allocation
         byte[] data = new byte[len];
         readAllBytes(in, data);
         return data;
     }
 
+    //ToDo: throw and handle an exception in case of END_OF_STREAM
     private static void readAllBytes(InputStream in, byte[] buffer) {
         int remainder = buffer.length;
         int acquired = 0;

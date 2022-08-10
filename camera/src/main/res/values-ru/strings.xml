@@ -9,4 +9,10 @@
     <string name="mapping_info">Доступен извне на %s:%d</string>
     <string name="already_mapped_info">Адрес %s:%d уже занят устройством %s</string>
     <string name="mapping_error">Ошибка проброса порта: %s</string>
+
+    <string name="authorization_request">Разрешить \'%s\' доступ к камерам этого устройства?</string>
+    <string name="allow_button">Разрешить</string>
+    <string name="allow_always_button">Всегда разрешать</string>
+    <string name="deny_button">Запретить</string>
+    <string name="deny_always_button">Всегда запрещать</string>
 </resources>
