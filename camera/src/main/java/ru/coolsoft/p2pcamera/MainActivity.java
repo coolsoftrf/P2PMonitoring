@@ -2,6 +2,7 @@ package ru.coolsoft.p2pcamera;
 
 import static android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE;
 import static android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP;
+import static android.util.Base64.DEFAULT;
 import static ru.coolsoft.common.Command.AVAILABILITY;
 import static ru.coolsoft.common.Command.FORMAT;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_NOT_ALLOWED;
@@ -34,6 +35,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.util.Base64;
 import android.util.Log;
 import android.util.Size;
 import android.view.Menu;
@@ -63,6 +65,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -539,7 +542,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onShadow(StreamWorker worker, String shadow) {
+        public void onShadow(StreamWorker worker, byte[] shadow) {
             ClientInfo clientInfo = new ClientInfo(worker);
             int clientIndex = clients.indexOf(clientInfo);
             if (clientIndex == -1) {
@@ -552,11 +555,13 @@ public class MainActivity extends AppCompatActivity {
             SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
             String user = clients.get(clientIndex).getUserName();
             String shadowPref = sm.getUserShadow(user);
+            String shaStr = Base64.encodeToString(shadow, DEFAULT);
             if (shadowPref == null) {
-                Log.d(LOG_TAG, String.format("Shadow initialized for user '%s':%s", user, shadow));
-                sm.setUserShadow(user, shadow);
-            } else if (!shadowPref.equals(shadow)) {
-                Log.d(LOG_TAG, String.format("Access denied for user '%s':%s (against %s)", user, shadow, shadowPref));
+                Log.d(LOG_TAG, String.format("Shadow initialized for user '%s':%s", user, shaStr));
+                sm.setUserShadow(user, shaStr);
+            } else if (!Arrays.equals(shadow, Base64.decode(shadowPref, DEFAULT))) {
+                Log.d(LOG_TAG, String.format("Access denied for user '%s' with shadow %s (against %s)",
+                        user, shaStr, shadowPref));
                 worker.onAuthorizationFailed(AUTH_DENIED_WRONG_CREDENTIALS);
                 return;
             }
@@ -622,9 +627,13 @@ public class MainActivity extends AppCompatActivity {
                         getString(R.string.unknown_command, (Integer) details), Toast.LENGTH_SHORT).show()
                 );
             } else {
-                runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                        R.string.unknown_error, Toast.LENGTH_SHORT).show()
-                );
+                String errorName;
+                if (details instanceof Exception) {
+                    errorName = String.format("%s: %s", situation.toString(), ((Exception) details).getLocalizedMessage());
+                } else {
+                    errorName = situation.toString();
+                }
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, errorName, Toast.LENGTH_SHORT).show());
             }
         }
     };

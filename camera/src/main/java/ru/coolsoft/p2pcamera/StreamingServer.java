@@ -140,7 +140,7 @@ public class StreamingServer extends Thread {
     public interface EventListener extends PortMappingServer.PortMappingListener {
         void onUser(StreamWorker worker, String user);
 
-        void onShadow(StreamWorker worker, String shadow);
+        void onShadow(StreamWorker worker, byte[] shadow);
 
         void onClientConnected(StreamWorker worker);
 
@@ -158,6 +158,7 @@ public class StreamingServer extends Thread {
     public enum Situation {
         CLIENT_STREAMING_ERROR,
         CLIENT_NOTIFICATION_ERROR,
+        CONNECTION_CLOSED,
         UNKNOWN_COMMAND,
     }
 }

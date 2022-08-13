@@ -4,7 +4,6 @@
     <string name="gateways_discovered">Gateways discovered: %d</string>
     <string name="client_count">Clients connected: %d</string>
     <string name="unknown_command">Unknown command: %d</string>
-    <string name="unknown_error">Unknown error: %d</string>
     <string name="binding_info">Bound to %s</string>
     <string name="mapping_info">Listening on %s:%d</string>
     <string name="already_mapped_info">Already mapped on %s:%d by %s</string>

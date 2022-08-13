@@ -16,6 +16,7 @@
     <string name="wrong_credentials">Неверное имя пользователя или пароль</string>
     <string name="access_denied">Доступ запрещён</string>
     <string name="sww">Что-то пошло не так. Попробуйте ещё раз.</string>
+    <string name="security_initialization_error">Ошибка инициализации системы безопасности</string>
 
     <string name="already_running">Сокет уже запущег</string>
     <string name="address_null">Адрес не может быть пустым</string>

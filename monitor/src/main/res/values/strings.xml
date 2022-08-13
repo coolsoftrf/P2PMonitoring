@@ -19,6 +19,7 @@
     <string name="wrong_credentials">Invalid login or password</string>
     <string name="access_denied">Access denied</string>
     <string name="sww">Something went wrong. Please try again</string>
+    <string name="security_initialization_error">Failed to initialize security engine</string>
 
     <string name="already_running">Client socket already running</string>
     <string name="address_null">Address can\'t be empty</string>

@@ -1,12 +1,19 @@
 package ru.coolsoft.p2pcamera;
 
+import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_OK;
+import static ru.coolsoft.common.Constants.CIPHER_ALGORITHM;
+import static ru.coolsoft.common.Constants.CIPHER_IV;
+import static ru.coolsoft.common.Constants.CIPHER_IV_CHARSET;
+import static ru.coolsoft.common.Constants.CIPHER_TRANSFORMATION;
 import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
 import static ru.coolsoft.common.Protocol.readData;
 import static ru.coolsoft.common.StreamId.AUTHENTICATION;
 import static ru.coolsoft.common.StreamId.CONTROL;
 import static ru.coolsoft.common.StreamId.MEDIA;
+import static ru.coolsoft.p2pcamera.StreamingServer.Situation.CLIENT_STREAMING_ERROR;
+import static ru.coolsoft.p2pcamera.StreamingServer.Situation.CONNECTION_CLOSED;
 import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
 
 import android.os.Handler;
@@ -14,14 +21,25 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.util.Log;
 
-import androidx.annotation.Nullable;
+import androidx.annotation.NonNull;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.StreamCorruptedException;
 import java.net.Socket;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.util.Arrays;
 
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import ru.coolsoft.common.BlockCipherOutputStream;
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Constants;
 import ru.coolsoft.common.StreamId;
@@ -37,6 +55,8 @@ public class StreamWorker extends Thread {
     private HandlerThread handlerThread;
     private InputStream in;
     private OutputStream out;
+    private CipherInputStream cin;
+    private BlockCipherOutputStream cout;
     private boolean running;
 
     private enum AuthStage {
@@ -47,6 +67,7 @@ public class StreamWorker extends Thread {
     }
 
     private AuthStage authStage = AuthStage.User;
+    private byte[] sha;
 
     public StreamWorker(Socket socket, WorkerEventListener workerEventListener, EventListener eventListener) {
         this.socket = socket;
@@ -55,7 +76,8 @@ public class StreamWorker extends Thread {
 
         handlerThread = new HandlerThread(StreamWorker.class.getSimpleName());
         handlerThread.start();
-        handler = new Handler(handlerThread.getLooper(), createSendRoutine(() -> out));
+        handler = new Handler(handlerThread.getLooper(),
+                createSendRoutine(streamId -> streamId == AUTHENTICATION ? out : cout));
         running = true;
     }
 
@@ -68,24 +90,6 @@ public class StreamWorker extends Thread {
         running = false;
 
         try {
-            if (in != null) {
-                in.close();
-                in = null;
-            }
-            if (out != null) {
-                out.flush();
-                out.close();
-                out = null;
-            }
-            if (handlerThread != null) {
-                handlerThread.quitSafely();
-                handlerThread = null;
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        try {
             if (socket != null) {
                 synchronized (this) {
                     if (socket != null) {
@@ -94,6 +98,37 @@ public class StreamWorker extends Thread {
                         socket = null;
                     }
                 }
+            }
+
+            if (cout != null) {
+                handler.post(() -> {
+                    if (cout != null) {
+                        try {
+                            cout.close();
+                            cout = null;
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+            }
+            if (out != null) {
+                out.close();
+                out = null;
+            }
+
+            if (in != null) {
+                in.close();
+                in = null;
+            }
+            if (cin != null) {
+                cin.close();
+                cin = null;
+            }
+
+            if (handlerThread != null) {
+                handlerThread.quitSafely();
+                handlerThread = null;
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -120,6 +155,22 @@ public class StreamWorker extends Thread {
                 authStage = AuthStage.Shadow;
                 break;
             case Shadow:
+                SecretKeySpec secretKeySpec = new SecretKeySpec(sha, CIPHER_ALGORITHM);
+                try {
+                    IvParameterSpec paramSpec = new IvParameterSpec(CIPHER_IV.getBytes(Charset.forName(CIPHER_IV_CHARSET)));
+                    Arrays.fill(sha, (byte) 0);
+
+                    Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+                    cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
+                    cout = new BlockCipherOutputStream(out, cipher);
+
+                    cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+                    cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);
+                    cin = new CipherInputStream(in, cipher);
+                } catch (GeneralSecurityException e) {
+                    onAuthorizationFailed(AUTH_DENIED_SERVER_ERROR);
+                    return;
+                }
                 authStage = AuthStage.Verified;
                 break;
             default:
@@ -151,7 +202,7 @@ public class StreamWorker extends Thread {
                 listener.onClientConnected(this);
                 loop:
                 while (running) {
-                    StreamId key = StreamId.byId(in.read());
+                    StreamId key = StreamId.byId((cin != null ? cin : in).read());
                     switch (key) {
                         case AUTHENTICATION:
                             if (!processAuth()) {
@@ -159,14 +210,23 @@ public class StreamWorker extends Thread {
                             }
                             break;
                         case CONTROL:
-                            if (authStage != AuthStage.Verified || !processCommand()) {
+                            if (authStage != AuthStage.Verified) {
                                 break loop;
                             }
+                            processCommand();
                             break;
                         case END_OF_STREAM:
                             break loop;
+/*
+                        case PADDING:
+                            //skip
+*/
                     }
                 }
+            } catch (StreamCorruptedException e) {
+                listener.onError(this, CLIENT_STREAMING_ERROR, e);
+            } catch (EOFException e) {
+                listener.onError(this, CONNECTION_CLOSED, e);
             } catch (Exception e) {
                 Log.w(LOG_TAG, "Worker loop interrupted", e);
             } finally {
@@ -178,58 +238,54 @@ public class StreamWorker extends Thread {
         }
     }
 
-    private boolean processAuth() {
+    private boolean processAuth() throws StreamCorruptedException, EOFException {
         //ToDo: wait until listener reports its decision
         switch (authStage) {
             case User:
-                listener.onUser(this, getAuthData());
+                listener.onUser(this, new String(getAuthData(), StandardCharsets.UTF_8));
                 return true;
             case Shadow:
-                listener.onShadow(this, getAuthData());
+                sha = getAuthData();
+                listener.onShadow(this, sha);
                 return true;
             case Verified:
                 //protocol violation
             case Denied:
-                //access denied
+                //no operations permitted
             default:
-                //whatever
+                //whatever illegal
                 return false;
         }
     }
 
-    @Nullable
-    private String getAuthData() {
+    @NonNull
+    private byte[] getAuthData() throws StreamCorruptedException, EOFException {
         byte[] bytes = readData(in);
         if (bytes.length == 0) {
-            return null;
+            throw new StreamCorruptedException();
         }
 
-        return new String(bytes, StandardCharsets.UTF_8);
+        return bytes;
     }
 
-    private boolean processCommand() {
-        try {
-            int cmdId = in.read();
-            Command cmd = Command.byId(cmdId);
-            readData(in);
-            switch (cmd) {
-                case FLASHLIGHT:
-                    //ToDo: process explicit state
-                    listener.onToggleFlashlight();
-                    break;
-                case CAPS:
-                    workerListener.reportCaps(this);
-                    break;
-                case END_OF_STREAM:
-                    return false;
-                default:
-                    listener.onError(this, UNKNOWN_COMMAND, cmdId);
-                    break;
-            }
-        } catch (IOException e) {
-            Log.e(LOG_TAG, "Error reading command ID", e);
+    private void processCommand() throws IOException {
+        int cmdId = cin.read();
+        Command cmd = Command.byId(cmdId);
+        readData(cin);
+        switch (cmd) {
+            case FLASHLIGHT:
+                //ToDo: process explicit state
+                listener.onToggleFlashlight();
+                break;
+            case CAPS:
+                workerListener.reportCaps(this);
+                break;
+            case END_OF_STREAM:
+                throw new EOFException();
+            default:
+                listener.onError(this, UNKNOWN_COMMAND, cmdId);
+                break;
         }
-        return true;
     }
 
     interface WorkerEventListener {

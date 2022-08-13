@@ -4,6 +4,7 @@ import static android.media.MediaFormat.KEY_HEIGHT;
 import static android.media.MediaFormat.KEY_WIDTH;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
 import static android.view.KeyEvent.KEYCODE_ENTER;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_SECURITY_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_NOT_ALLOWED;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_WRONG_CREDENTIALS;
@@ -290,6 +291,9 @@ public class MainActivity extends AppCompatActivity {
                     case AUTH_DENIED_NOT_ALLOWED:
                         message = getString(R.string.access_denied);
                         break;
+                    case AUTH_DENIED_SECURITY_ERROR:
+                        message = getString(R.string.security_initialization_error);
+                        break;
                     case AUTH_DENIED_SERVER_ERROR:
                     default:
                         message = getString(R.string.sww);
@@ -298,6 +302,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 message = situation.toString() + ": " + e.getMessage();
             }
+            Log.w(LOG_TAG, message, e);
             runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
             switch (situation) {
                 case HOST_UNRESOLVED_ERROR:

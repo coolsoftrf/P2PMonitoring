@@ -1,33 +1,51 @@
 package ru.coolsoft.p2pmonitor;
 
+import static ru.coolsoft.common.Constants.AUTH_DENIED_SECURITY_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_OK;
+import static ru.coolsoft.common.Constants.CIPHER_ALGORITHM;
+import static ru.coolsoft.common.Constants.CIPHER_IV;
+import static ru.coolsoft.common.Constants.CIPHER_IV_CHARSET;
+import static ru.coolsoft.common.Constants.CIPHER_TRANSFORMATION;
 import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.Protocol.END_OF_STREAM;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
 import static ru.coolsoft.common.StreamId.AUTHENTICATION;
 import static ru.coolsoft.common.StreamId.CONTROL;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.AUTH_ERROR;
-import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CLOSING;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CONNECTION_CLOSED;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.ERROR_CLOSING;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.HOST_UNRESOLVED_ERROR;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.SOCKET_INITIALIZATION_ERROR;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.STREAMING_ERROR;
 
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.util.Log;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.StreamCorruptedException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.List;
 
+import javax.crypto.Cipher;
+import javax.crypto.CipherInputStream;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import ru.coolsoft.common.BlockCipherOutputStream;
 import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Defaults;
 import ru.coolsoft.common.Protocol;
@@ -43,7 +61,9 @@ public class StreamingClient extends Thread {
 
     private Socket socket;
     private InputStream in;
+    private CipherInputStream cin;
     private OutputStream out;
+    private BlockCipherOutputStream cout;
 
     private byte[] mSha;
 
@@ -53,7 +73,8 @@ public class StreamingClient extends Thread {
 
         handlerThread = new HandlerThread(StreamingClient.class.getSimpleName());
         handlerThread.start();
-        handler = new Handler(handlerThread.getLooper(), createSendRoutine(() -> out));
+        handler = new Handler(handlerThread.getLooper(),
+                createSendRoutine(streamId -> streamId == AUTHENTICATION ? out : cout));
     }
 
     public void logIn(String login, String password) {
@@ -61,7 +82,6 @@ public class StreamingClient extends Thread {
             mSha = MessageDigest.getInstance("SHA-256").digest(password.getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException e) {
             //impossible case for SHA-256 supported since API v1
-            e.printStackTrace();
             terminate();
             return;
         }
@@ -84,7 +104,6 @@ public class StreamingClient extends Thread {
             address = InetAddress.getByName(serverAddress);
         } catch (UnknownHostException e) {
             eventListener.onError(HOST_UNRESOLVED_ERROR, null, e);
-            e.printStackTrace();
             return;
         }
 
@@ -96,7 +115,6 @@ public class StreamingClient extends Thread {
             eventListener.onConnected();
         } catch (IOException e) {
             eventListener.onError(SOCKET_INITIALIZATION_ERROR, null, e);
-            e.printStackTrace();
             return;
         }
 
@@ -104,16 +122,32 @@ public class StreamingClient extends Thread {
         try {
             loop:
             while (true) {
-                int streamId = in.read();
+                int streamId = (cin != null ? cin : in).read();
                 switch (StreamId.byId(streamId)) {
                     case AUTHENTICATION:
                         int result = in.read();
-                        switch (result){
+                        switch (result) {
                             case AUTH_OK:
                                 if (!shaSent) {
                                     sendAuth(mSha);
                                     shaSent = true;
                                 } else {
+                                    SecretKeySpec secretKeySpec = new SecretKeySpec(mSha, CIPHER_ALGORITHM);
+                                    try {
+                                        IvParameterSpec paramSpec = new IvParameterSpec(CIPHER_IV.getBytes(Charset.forName(CIPHER_IV_CHARSET)));
+                                        Arrays.fill(mSha, (byte) 0);
+
+                                        Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+                                        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);
+                                        cin = new CipherInputStream(in, cipher);
+
+                                        cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+                                        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
+                                        cout = new BlockCipherOutputStream(out, cipher);
+                                    } catch (GeneralSecurityException e) {
+                                        eventListener.onError(AUTH_ERROR, (byte) AUTH_DENIED_SECURITY_ERROR, e);
+                                        return;
+                                    }
                                     eventListener.onAuthorized();
                                 }
                                 break;
@@ -126,13 +160,13 @@ public class StreamingClient extends Thread {
                         break;
 
                     case MEDIA: {
-                        byte[] media = Protocol.readData(in);
+                        byte[] media = Protocol.readData(cin);
                         eventListener.onMedia(media);
                         break;
                     }
 
                     case CONTROL: {
-                        int cmdId = in.read();
+                        int cmdId = cin.read();
                         Command cmd = Command.byId(cmdId);
                         byte[] data;
                         switch (cmd) {
@@ -142,7 +176,7 @@ public class StreamingClient extends Thread {
                             case END_OF_STREAM:
                                 break loop;
                             default:
-                                data = Protocol.readData(in);
+                                data = Protocol.readData(cin);
                                 break;
                         }
                         eventListener.onCommand(cmd, data);
@@ -152,28 +186,85 @@ public class StreamingClient extends Thread {
                         Log.e(LOG_TAG, String.format("Unexpected stream ID: %d", streamId));
                     case END_OF_STREAM:
                         break loop;
+                    case PADDING:
+                        //skip
                 }
             }
+        } catch (StreamCorruptedException e) {
+            eventListener.onError(STREAMING_ERROR, null, e);
+        } catch (EOFException e) {
+            eventListener.onError(CONNECTION_CLOSED, null, e);
         } catch (IOException e) {
             Log.w(LOG_TAG, "Client loop interrupted", e);
         } finally {
-            terminate();
+            terminateAndCleanup();
         }
     }
 
     public void terminate() {
-        try {
-            if (socket != null) {
+        if (socket != null) {
+            try {
                 socket.close();
-                socket = null;
+            } catch (IOException e) {
+                eventListener.onError(ERROR_CLOSING, null, e);
             }
-            if (handlerThread != null) {
-                handlerThread.quitSafely();
-                handlerThread = null;
-            }
-        } catch (IOException e) {
-            eventListener.onError(CLOSING, null, e);
+            socket = null;
         }
+    }
+
+    public void terminateAndCleanup() {
+        if (socket != null) {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                eventListener.onError(ERROR_CLOSING, null, e);
+            }
+            socket = null;
+        }
+
+        if (cout != null) {
+            handler.post(() -> {
+                if (cout != null) {
+                    try {
+                        cout.close();
+                    } catch (IOException e) {
+                        eventListener.onError(ERROR_CLOSING, null, e);
+                    }
+                    cout = null;
+                }
+            });
+        }
+        if (out != null) {
+            try {
+                out.close();
+            } catch (IOException e) {
+                eventListener.onError(ERROR_CLOSING, null, e);
+            }
+            out = null;
+        }
+
+        if (in != null) {
+            try {
+                in.close();
+            } catch (IOException e) {
+                eventListener.onError(ERROR_CLOSING, null, e);
+            }
+            in = null;
+        }
+        if (cin != null) {
+            try {
+                cin.close();
+            } catch (IOException e) {
+                eventListener.onError(ERROR_CLOSING, null, e);
+            }
+            cin = null;
+        }
+
+        if (handlerThread != null) {
+            handlerThread.quitSafely();
+            handlerThread = null;
+        }
+
         eventListener.onDisconnected();
     }
 
@@ -182,7 +273,9 @@ public class StreamingClient extends Thread {
             HOST_UNRESOLVED_ERROR,
             SOCKET_INITIALIZATION_ERROR,
             AUTH_ERROR,
-            CLOSING
+            STREAMING_ERROR,
+            CONNECTION_CLOSED,
+            ERROR_CLOSING
         }
 
         void onConnected();
