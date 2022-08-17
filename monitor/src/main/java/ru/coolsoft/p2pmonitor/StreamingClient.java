@@ -104,6 +104,7 @@ public class StreamingClient extends Thread {
             address = InetAddress.getByName(serverAddress);
         } catch (UnknownHostException e) {
             eventListener.onError(HOST_UNRESOLVED_ERROR, null, e);
+            terminateAndCleanup();
             return;
         }
 
@@ -115,6 +116,7 @@ public class StreamingClient extends Thread {
             eventListener.onConnected();
         } catch (IOException e) {
             eventListener.onError(SOCKET_INITIALIZATION_ERROR, null, e);
+            terminateAndCleanup();
             return;
         }
 
@@ -199,6 +201,10 @@ public class StreamingClient extends Thread {
         } finally {
             terminateAndCleanup();
         }
+    }
+
+    public boolean isAuthorized() {
+        return cout != null;
     }
 
     public void terminate() {

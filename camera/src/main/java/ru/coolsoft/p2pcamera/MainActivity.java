@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static int computeRelativeRotation(
             CameraCharacteristics characteristics,
-            int surfaceRotationDegrees
+            int displayRotationDegrees
     ) {
         Integer sensorOrientationDegrees =
                 characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
@@ -120,35 +120,35 @@ public class MainActivity extends AppCompatActivity {
 
         // Calculate desired orientation relative to camera orientation to make
         // the image upright relative to the device orientation.
-        return (sensorOrientationDegrees - surfaceRotationDegrees * sign + 360) % 360;
+        return (sensorOrientationDegrees - displayRotationDegrees * sign + 360) % 360;
     }
 
     private static Matrix computeTransformationMatrix(
             TextureView textureView,
             CameraCharacteristics characteristics,
             Size previewSize,
-            int surfaceRotation
+            int displayRotation
     ) {
         Matrix matrix = new Matrix();
-        int surfaceRotationDegrees;
-        switch (surfaceRotation) {
+        int displayRotationDegrees;
+        switch (displayRotation) {
             case Surface.ROTATION_90:
-                surfaceRotationDegrees = 90;
+                displayRotationDegrees = 90;
                 break;
             case Surface.ROTATION_180:
-                surfaceRotationDegrees = 180;
+                displayRotationDegrees = 180;
                 break;
             case Surface.ROTATION_270:
-                surfaceRotationDegrees = 270;
+                displayRotationDegrees = 270;
                 break;
             case Surface.ROTATION_0:
             default:
-                surfaceRotationDegrees = 0;
+                displayRotationDegrees = 0;
         }
 
         /* Rotation required to transform from the camera sensor orientation to the
          * device's current orientation in degrees. */
-        int relativeRotation = computeRelativeRotation(characteristics, surfaceRotationDegrees);
+        int relativeRotation = computeRelativeRotation(characteristics, displayRotationDegrees);
 
         /* Scale factor required to scale the preview to its original size on the x-axis. */
         float scaleX = (relativeRotation % 180 == 0)
@@ -182,7 +182,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Rotate the TextureView to compensate for the Surface's rotation.
         matrix.postRotate(
-                (float) -surfaceRotationDegrees,
+                (float) -displayRotationDegrees,
                 textureView.getWidth() / 2f,
                 textureView.getHeight() / 2f
         );
@@ -265,6 +265,7 @@ public class MainActivity extends AppCompatActivity {
     private final TextureView.SurfaceTextureListener surfaceTextureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture texture, int width, int height) {
+            Log.d(LOG_TAG, "texture available");
             ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
                 CameraCharacteristics cameraCharacteristics;
                 try {
@@ -294,6 +295,7 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
+            Log.d(LOG_TAG, "texture size changed");
         }
 
         @Override

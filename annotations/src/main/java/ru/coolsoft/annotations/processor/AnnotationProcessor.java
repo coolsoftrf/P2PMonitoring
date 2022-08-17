@@ -10,6 +10,7 @@ import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.util.Context;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -60,13 +61,25 @@ public class AnnotationProcessor extends AbstractProcessor {
                 return;
             }
 
-            final Context context = ((JavacProcessingEnvironment) processingEnv).getContext();
-            Trees trees = Trees.instance(processingEnv);
-            TreeMaker treeMaker = TreeMaker.instance(context);
-            JavacElements elements = JavacElements.instance(context);
-            JCTree.JCClassDecl enumTree = (JCTree.JCClassDecl) trees.getTree(enumeration);
+            JavacProcessingEnvironment env;
+            if (processingEnv instanceof JavacProcessingEnvironment) {
+                env = (JavacProcessingEnvironment) processingEnv;
+            } else {
+                try {
+                    Field delegate = processingEnv.getClass().getDeclaredField("delegate");
+                    delegate.setAccessible(true);
+                    env = (JavacProcessingEnvironment) delegate.get(processingEnv);
+                } catch (NoSuchFieldException | IllegalAccessException e) {
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "Unsupported ProcessingEnvironment");
+                    return;
+                }
+            }
+            final Context context = env.getContext();
+            final Trees trees = Trees.instance(env);
+            final TreeMaker treeMaker = TreeMaker.instance(context);
+            final JavacElements elements = JavacElements.instance(context);
+            final JCTree.JCClassDecl enumTree = (JCTree.JCClassDecl) trees.getTree(enumeration);
 
-            //pos opt
             treeMaker.at(((JCTree.JCVariableDecl) trees.getTree(refField)).pos);
             JCTree.JCVariableDecl idParam = treeMaker.VarDef(
                     treeMaker.Modifiers(Flags.PARAMETER),
@@ -94,8 +107,6 @@ public class AnnotationProcessor extends AbstractProcessor {
                     treeMaker.Return(treeMaker.Ident((JCTree.JCVariableDecl) trees.getTree(defaultConstant)))
             )));
 
-            //pos opt
-            //idParam.pos = ((JCTree.JCVariableDecl)trees.getTree(refField)).pos;
             JCTree.JCMethodDecl method = treeMaker.MethodDef(
                     treeMaker.Modifiers(Flags.PUBLIC | Flags.STATIC),
                     elements.getName(BY_ID_METHOD_MANE),

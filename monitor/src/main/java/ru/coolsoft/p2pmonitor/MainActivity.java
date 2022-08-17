@@ -4,14 +4,15 @@ import static android.media.MediaFormat.KEY_HEIGHT;
 import static android.media.MediaFormat.KEY_WIDTH;
 import static android.media.MediaFormat.MIMETYPE_VIDEO_AVC;
 import static android.view.KeyEvent.KEYCODE_ENTER;
-import static ru.coolsoft.common.Constants.AUTH_DENIED_SECURITY_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_NOT_ALLOWED;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_SECURITY_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_WRONG_CREDENTIALS;
 import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
 import static ru.coolsoft.common.Protocol.MEDIA_BUFFER_SIZE;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
@@ -24,6 +25,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -76,7 +78,7 @@ public class MainActivity extends AppCompatActivity {
     private TextureView mTextureView;
     private float textureRotation = 0;
 
-    private MediaCodec mCodec = null;
+    private volatile MediaCodec mCodec = null;
     private final ByteArrayOutputStream mediaStream = new ByteArrayOutputStream(MEDIA_BUFFER_SIZE);
 
     private final Runnable mHidePart2Runnable = new Runnable() {
@@ -171,17 +173,20 @@ public class MainActivity extends AppCompatActivity {
         public void onConnected() {
             runOnUiThread(() -> {
                 mAuthControls.setVisibility(View.VISIBLE);
+                mLogin.requestFocus();
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.showSoftInput(mLogin, InputMethodManager.SHOW_IMPLICIT);
                 mPassword.setOnKeyListener(onPasswordEditKeyListener);
             });
         }
 
         @Override
         public void onDisconnected() {
+            client = null;
+            stopCodec();
             runOnUiThread(() -> {
                 mAuthControls.setVisibility(View.GONE);
                 mCameraControls.setVisibility(View.INVISIBLE);
-                client = null;
-                stopCodec();
                 restoreConnectControls();
                 showConnectionControls();
             });
@@ -304,11 +309,6 @@ public class MainActivity extends AppCompatActivity {
             }
             Log.w(LOG_TAG, message, e);
             runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());
-            switch (situation) {
-                case HOST_UNRESOLVED_ERROR:
-                case SOCKET_INITIALIZATION_ERROR:
-                    terminateSession();
-            }
         }
 
         private boolean checkDataLen(Command command, Integer countAtLeast, Integer countExact, byte[] data) {
@@ -327,10 +327,14 @@ public class MainActivity extends AppCompatActivity {
 
         private void stopCodec() {
             if (mCodec != null) {
-                mCodec.stop();
-                mCodec.reset();
-                mCodec.release();
-                mCodec = null;
+                synchronized (MainActivity.this) {
+                    if (mCodec != null) {
+                        mCodec.stop();
+                        mCodec.reset();
+                        mCodec.release();
+                        mCodec = null;
+                    }
+                }
             }
         }
     };
@@ -417,19 +421,24 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateTextureLayout(int parentWidth, int parentHeight) {
-        float width, height;
+        float width = 0, height = 0;
         boolean swap = textureRotation % 180 == 90;
         if (mCodec != null) {
-            float w = mCodec.getInputFormat().getInteger(KEY_WIDTH);
-            float h = mCodec.getInputFormat().getInteger(KEY_HEIGHT);
-            if (swap) {
-                width = h;
-                height = w;
-            } else {
-                width = w;
-                height = h;
+            synchronized (this) {
+                if (mCodec != null) {
+                    float w = mCodec.getInputFormat().getInteger(KEY_WIDTH);
+                    float h = mCodec.getInputFormat().getInteger(KEY_HEIGHT);
+                    if (swap) {
+                        width = h;
+                        height = w;
+                    } else {
+                        width = w;
+                        height = h;
+                    }
+                }
             }
-        } else {
+        }
+        if (width == 0 || height == 0) {
             width = mTextureView.getMeasuredWidth();
             height = mTextureView.getMeasuredHeight();
         }
@@ -532,7 +541,13 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onInputBufferAvailable(@NonNull MediaCodec codec, int index) {
             byte[] b;
-            ByteBuffer inputBuffer = mCodec.getInputBuffer(index);
+            ByteBuffer inputBuffer;
+            try {
+                inputBuffer = codec.getInputBuffer(index);
+            } catch (IllegalStateException e) {
+                Log.w(LOG_TAG, "error retrieving input buffer", e);
+                return;
+            }
             inputBuffer.clear();
             synchronized (mediaStream) {
                 b = mediaStream.toByteArray();
@@ -541,13 +556,21 @@ public class MainActivity extends AppCompatActivity {
             inputBuffer.put(b);
 
             Log.v(LOG_TAG, String.format("processing %d bytes of media to buffer #%d", b.length, index));
-            mCodec.queueInputBuffer(index, 0, b.length, 0, 0);
+            try {
+                codec.queueInputBuffer(index, 0, b.length, 0, 0);
+            } catch (IllegalStateException e) {
+                Log.w(LOG_TAG, "error queuing new input buffer", e);
+            }
         }
 
         @Override
         public void onOutputBufferAvailable(@NonNull MediaCodec codec, int index, @NonNull MediaCodec.BufferInfo info) {
-            codec.releaseOutputBuffer(index, true);
-            Log.v(LOG_TAG, "output buffer released to surface");
+            try {
+                codec.releaseOutputBuffer(index, true);
+                Log.v(LOG_TAG, "output buffer released to surface");
+            } catch (IllegalStateException e) {
+                Log.w(LOG_TAG, "error releasing output buffer", e);
+            }
         }
 
         @Override
@@ -575,7 +598,7 @@ public class MainActivity extends AppCompatActivity {
         if (actionBar != null) {
             actionBar.hide();
         }
-        if (client != null) {
+        if (client != null && client.isAuthorized()) {
             mControlsView.setVisibility(View.GONE);
         }
         mVisible = false;

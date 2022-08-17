@@ -140,7 +140,7 @@ public class StreamWorker extends Thread {
     }
 
     public boolean sendFrame(byte[] buffer) {
-        return sendData(buffer, MEDIA.id);
+        return isNotReady() || sendData(buffer, MEDIA.id);
     }
 
     public void onAuthorizationFailed(@Constants.AuthFailureCause int cause) {
@@ -181,9 +181,14 @@ public class StreamWorker extends Thread {
     }
 
     private boolean sendData(byte[] data, int... args) {
-        if (out == null
-                || args.length == 0
-                || args[0] != StreamId.AUTHENTICATION.id && data == null) {
+        if (args.length == 0) {
+            return false;
+        }
+        if (args[0] == AUTHENTICATION.id) {
+            if (out == null) {
+                return false;
+            }
+        } else if (cout == null || data == null) {
             return false;
         }
 
@@ -210,7 +215,7 @@ public class StreamWorker extends Thread {
                             }
                             break;
                         case CONTROL:
-                            if (authStage != AuthStage.Verified) {
+                            if (isNotReady()) {
                                 break loop;
                             }
                             processCommand();
@@ -236,6 +241,10 @@ public class StreamWorker extends Thread {
             Log.e(LOG_TAG, "I/O stream creation failed", e);
             e.printStackTrace();
         }
+    }
+
+    private boolean isNotReady() {
+        return authStage != AuthStage.Verified;
     }
 
     private boolean processAuth() throws StreamCorruptedException, EOFException {

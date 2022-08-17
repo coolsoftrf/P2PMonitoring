@@ -35,12 +35,15 @@ which supports Enum annotations used in this project)
 - [x] Client: control frame rotation
 - [ ] Protocol: capture (high-res) photo
 - [x] Server: stop encoder when last client disconnects
+- [ ] Server: check ownership of current port mapping before erasing 
 - [ ] Server: detect connection drops/switchovers/IP renewals etc.
 - [ ] Server: periodic port mapping check and refresh
-- [x] Server: fix image freezes
+- [x] Server: fix image freezes on 1st connection / last disconnection on API 25 devices
+- [ ] Server: fix image turns 90 deg CCW on 1st connection / last disconnection on API 25 devices
+- [ ] Client: fix image out of sync on slow devices 
 ## Phase #2 - «Security»
 - [x] Authentication and Authorization
-- [ ] Payload encryption
+- [x] Payload ciphering
 - [ ] Secure transport layer
 - [ ] Server: UI controls for user management
 ## Phase #3 - «Camera controls»

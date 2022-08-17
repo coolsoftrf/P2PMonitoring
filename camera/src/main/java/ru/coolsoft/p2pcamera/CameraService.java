@@ -101,10 +101,8 @@ public class CameraService {
         if (mSession != null) {
             try {
                 mSession.stopRepeating();
-                //restart the session within mSession.StateCallback.onReady
-                return;
             } catch (CameraAccessException | IllegalStateException e) {
-                Log.e(LOG_TAG, "Error stopping capture session", e);
+                Log.w(LOG_TAG, "Error stopping capture session", e);
             } finally {
                 mSession = null;
             }
@@ -143,15 +141,8 @@ public class CameraService {
                         }
 
                         @Override
-                        public void onReady(@NonNull CameraCaptureSession session) {
-                            if (mSession == null) {
-                                // requests are being stopped to recreate a session with pending surfaces
-                                updatePreviewSession();
-                            }
-                        }
-
-                        @Override
                         public void onConfigureFailed(CameraCaptureSession session) {
+                            Log.e(LOG_TAG, "onConfigureFailed");
                         }
                     }, mHandler);
         } catch (CameraAccessException e) {
@@ -223,7 +214,7 @@ public class CameraService {
         Log.i(LOG_TAG, "encoder started");
     }
 
-    public void stopMediaStreaming() {
+    public synchronized void stopMediaStreaming() {
         if (mCodec != null) {
             Log.i(LOG_TAG, "stopping encoder");
 

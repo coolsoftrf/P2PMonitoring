@@ -3,6 +3,7 @@ package ru.coolsoft.common;
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
 import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.StreamId.AUTHENTICATION;
+import static ru.coolsoft.common.StreamId.MEDIA;
 
 import android.os.Handler;
 
@@ -27,12 +28,13 @@ public class Protocol {
                     dataLen = 0;
                 }
 
-                OutputStream out = outputStreamSupplier.get(StreamId.byId(msg.arg1));
+                StreamId streamId = StreamId.byId(msg.arg1);
+                OutputStream out = outputStreamSupplier.get(streamId);
                 out.write(msg.arg1);
                 if (msg.arg2 != UNUSED) {
                     out.write(msg.arg2);
                 }
-                if (msg.arg1 == AUTHENTICATION.id && dataLen == 0) {
+                if (streamId == AUTHENTICATION && dataLen == 0) {
                     return true;
                 }
 
@@ -42,7 +44,9 @@ public class Protocol {
                 if (dataLen > 0) {
                     out.write((byte[]) msg.obj);
                 }
-                out.flush();
+                if (streamId != MEDIA) {
+                    out.flush();
+                }
                 return true;
             } catch (IOException e) {
                 e.printStackTrace();
