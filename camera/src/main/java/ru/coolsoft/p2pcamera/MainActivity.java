@@ -18,6 +18,7 @@ import static ru.coolsoft.p2pcamera.AuthorizationDialogFragment.USER_KEY;
 import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Matrix;
@@ -127,9 +128,8 @@ public class MainActivity extends AppCompatActivity {
             TextureView textureView,
             CameraCharacteristics characteristics,
             Size previewSize,
-            int displayRotation
-    ) {
-        Matrix matrix = new Matrix();
+            int displayRotation,
+            Matrix textureTransformMatrix) {
         int displayRotationDegrees;
         switch (displayRotation) {
             case Surface.ROTATION_90:
@@ -150,42 +150,30 @@ public class MainActivity extends AppCompatActivity {
          * device's current orientation in degrees. */
         int relativeRotation = computeRelativeRotation(characteristics, displayRotationDegrees);
 
-        /* Scale factor required to scale the preview to its original size on the x-axis. */
+        // Scale factor required to scale the preview to its original size on the x-axis
         float scaleX = (relativeRotation % 180 == 0)
                 ? (float) textureView.getWidth() / previewSize.getWidth()
                 : (float) textureView.getWidth() / previewSize.getHeight();
-
-        /* Scale factor required to scale the preview to its original size on the y-axis. */
+        // Scale factor required to scale the preview to its original size on the y-axis
         float scaleY = (relativeRotation % 180 == 0)
                 ? (float) textureView.getHeight() / previewSize.getHeight()
                 : (float) textureView.getHeight() / previewSize.getWidth();
-
-        /* Scale factor required to fit the preview to the TextureView size. */
+        // Scale factor required to fit the preview to the TextureView size
         float finalScale = Math.min(scaleX, scaleY);
 
-        /* The scale will be different if the buffer has been rotated. */
+        Matrix matrix = new Matrix();
+        //normalize texture
+        matrix.postScale(1f / textureView.getWidth(), 1f / textureView.getHeight());
+        //compensate matrix changes
+        matrix.postConcat(textureTransformMatrix);
+        //compensate surface rotation
+        matrix.postRotate((float) -displayRotationDegrees, 0.5f, 0.5f);
+        //adjust scales
         if (relativeRotation % 180 == 0) {
-            matrix.setScale(
-                    textureView.getHeight() / (float) textureView.getWidth() / scaleY * finalScale,
-                    textureView.getWidth() / (float) textureView.getHeight() / scaleX * finalScale,
-                    textureView.getWidth() / 2f,
-                    textureView.getHeight() / 2f
-            );
+            matrix.postScale(previewSize.getWidth() * finalScale, previewSize.getHeight() * finalScale);
         } else {
-            matrix.setScale(
-                    1 / scaleX * finalScale,
-                    1 / scaleY * finalScale,
-                    textureView.getWidth() / 2f,
-                    textureView.getHeight() / 2f
-            );
+            matrix.postScale(previewSize.getHeight() * finalScale, previewSize.getWidth() * finalScale);
         }
-
-        // Rotate the TextureView to compensate for the Surface's rotation.
-        matrix.postRotate(
-                (float) -displayRotationDegrees,
-                textureView.getWidth() / 2f,
-                textureView.getHeight() / 2f
-        );
 
         return matrix;
     }
@@ -263,11 +251,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private final TextureView.SurfaceTextureListener surfaceTextureListener = new TextureView.SurfaceTextureListener() {
+        final Matrix startupMtx = new Matrix();
+        final Matrix prevMtx = new Matrix();
+        final Matrix transformMtx = new Matrix();
+
+        CameraCharacteristics cameraCharacteristics;
+        Size previewSize;
+        int rotation;
+
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture texture, int width, int height) {
             Log.d(LOG_TAG, "texture available");
             ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
-                CameraCharacteristics cameraCharacteristics;
                 try {
                     cameraCharacteristics = mCameraManager.getCameraCharacteristics(camera.mCameraID);
                 } catch (CameraAccessException e) {
@@ -278,12 +273,11 @@ public class MainActivity extends AppCompatActivity {
                 StreamConfigurationMap previewConfig = cameraCharacteristics.get(SCALER_STREAM_CONFIGURATION_MAP);
 
                 int[] formats = previewConfig.getOutputFormats();
-                Size previewSize = previewConfig.getOutputSizes(formats[0])[0];
+                previewSize = previewConfig.getOutputSizes(formats[0])[0];
 
-                final int rotation = getWindowManager().getDefaultDisplay().getRotation();
+                rotation = mTextureView.getDisplay().getRotation();
                 Log.d(LOG_TAG, "Current Rotation: " + rotation);
-                Matrix m = computeTransformationMatrix(mTextureView, cameraCharacteristics, previewSize, rotation);
-                runOnUiThread(() -> mTextureView.setTransform(m));
+                updateTransform();
 
                 texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
                 Surface surface = new Surface(texture);
@@ -312,6 +306,38 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onSurfaceTextureUpdated(@NonNull SurfaceTexture surface) {
+            float[] newMtx = new float[16];
+            surface.getTransformMatrix(newMtx);
+
+            Matrix matrix = new Matrix();
+            float[] matrix3x3 = new float[]{
+                    newMtx[0], newMtx[4], newMtx[4 * 3],
+                    newMtx[1], newMtx[4 + 1], newMtx[4 * 3 + 1],
+                    newMtx[3], newMtx[4 + 3], newMtx[4 * 3 + 3]
+            };
+            matrix.setValues(matrix3x3);
+
+            if (prevMtx.equals(matrix)) {
+                return;
+            }
+            prevMtx.set(matrix);
+
+            if (startupMtx.isIdentity()) {
+                startupMtx.set(matrix);
+                return;
+            }
+
+            if (!startupMtx.invert(transformMtx)) {
+                Log.w(LOG_TAG, "irreversible matrix!");
+                return;
+            }
+            transformMtx.postConcat(matrix);
+            updateTransform();
+        }
+
+        private void updateTransform() {
+            Matrix m = computeTransformationMatrix(mTextureView, cameraCharacteristics, previewSize, rotation, transformMtx);
+            runOnUiThread(() -> mTextureView.setTransform(m));
         }
     };
 
@@ -622,11 +648,12 @@ public class MainActivity extends AppCompatActivity {
             streamingServer.notifyClients(AVAILABILITY, buf.array());
         }
 
+        @SuppressLint("StringFormatMatches")
         @Override
         public void onError(StreamWorker worker, StreamingServer.Situation situation, Object details) {
             if (situation == UNKNOWN_COMMAND) {
                 runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                        getString(R.string.unknown_command, (Integer) details), Toast.LENGTH_SHORT).show()
+                        getString(R.string.unknown_command, details), Toast.LENGTH_SHORT).show()
                 );
             } else {
                 String errorName;

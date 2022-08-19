@@ -55,8 +55,8 @@ which supports Enum annotations used in this project)
 ## Phase #4 - «UX»
 - [ ] Client & Server: color themes
 - [ ] Client: action icons
-- [ ] Client: rotate icons instead of screen orientation
-- [ ] Client: server address history
+- [ ] Client & Server: rotate UI controls instead of screen orientation
+- [ ] Client: server address & login history
 - [ ] Server: client statistics (address, connection time, etc.)
 ## Phase #5 - «Media store»
 - [ ] PC client app
