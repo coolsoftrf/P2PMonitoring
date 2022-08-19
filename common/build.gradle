@@ -34,6 +34,6 @@ dependencies {
 
     implementation 'androidx.annotation:annotation:1.4.0'
 
-    //ToDo: Fix Bali plugin not to require this line for @ById annotations processing
+    //ToDo: Fix Bali plugin not to require this dependency for @ById annotations processing
     compileOnly 'org.projectlombok:lombok:1.18.24'
 }

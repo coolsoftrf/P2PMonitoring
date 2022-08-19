@@ -33,14 +33,15 @@ which supports Enum annotations used in this project)
 - [x] Refactor `Message` acquisition via `obtain()`
 - [ ] Create unit tests
 - [x] Client: control frame rotation
-- [ ] Protocol: capture (high-res) photo
+- [ ] Protocol: capture (high-res) photo on the fly
 - [x] Server: stop encoder when last client disconnects
 - [ ] Server: check ownership of current port mapping before erasing 
 - [ ] Server: detect connection drops/switchovers/IP renewals etc.
 - [ ] Server: periodic port mapping check and refresh
 - [x] Server: fix image freezes on 1st connection / last disconnection on API 25 devices
-- [ ] Server: fix image turns 90 deg CCW on 1st connection / last disconnection on API 25 devices
-- [ ] Client: fix image out of sync on slow devices 
+- [x] Server: fix image turns 90 deg CCW on 1st connection / last disconnection on API 25 devices
+- [ ] Client: fix image out of sync on slow devices
+- [ ] Client: add media stream watchdog and connection revival
 ## Phase #2 - «Security»
 - [x] Authentication and Authorization
 - [x] Payload ciphering
