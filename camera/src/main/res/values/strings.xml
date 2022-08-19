@@ -6,7 +6,7 @@
     <string name="unknown_command">Unknown command: %d</string>
     <string name="binding_info">Bound to %s</string>
     <string name="mapping_info">Listening on %s:%d</string>
-    <string name="already_mapped_info">Already mapped on %s:%d by %s</string>
+    <string name="already_mapped_info">Already mapped on %1$s:%2$d by %3$s</string>
     <string name="mapping_error">Error mapping a port: %s</string>
 
     <string name="authorization_request">Do you want to grant \'%s\' access to this device cameras?</string>

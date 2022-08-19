@@ -6,7 +6,7 @@
     <string name="unknown_command">Неизвестная команда: %d</string>
     <string name="binding_info">Интерфейс %s</string>
     <string name="mapping_info">Доступен извне на %s:%d</string>
-    <string name="already_mapped_info">Адрес %s:%d уже занят устройством %s</string>
+    <string name="already_mapped_info">Адрес %1$s:%2$d уже занят устройством %3$s</string>
     <string name="mapping_error">Ошибка проброса порта: %s</string>
 
     <string name="authorization_request">Разрешить \'%s\' доступ к камерам этого устройства?</string>

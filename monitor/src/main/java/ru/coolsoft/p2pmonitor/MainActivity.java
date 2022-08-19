@@ -38,7 +38,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -74,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private final Handler mHideHandler = new Handler();
+    private Handler mHideHandler;
     private TextureView mTextureView;
     private float textureRotation = 0;
 
@@ -261,8 +260,8 @@ public class MainActivity extends AppCompatActivity {
                         if (checkDataLen(command, null, 4 + len + 1, data)) {
                             byte[] idBytes = new byte[len];
                             buffer.get(idBytes);
-                            String cameraId = new String(idBytes, StandardCharsets.UTF_8);
                             //ToDo: process availability by id
+                            //String cameraId = new String(idBytes, StandardCharsets.UTF_8);
                             setCameraControlsAvailability(buffer.get() == CAMERA_AVAILABLE);
                         }
                         break;
@@ -366,6 +365,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        mHideHandler = new Handler(getMainLooper());
 
         ActivityMainBinding binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
