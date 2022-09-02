@@ -9,9 +9,32 @@
     <string name="already_mapped_info">Already mapped on %1$s:%2$d by %3$s</string>
     <string name="mapping_error">Error mapping a port: %s</string>
 
+    <!-- Authorization UI -->
     <string name="authorization_request">Do you want to grant \'%s\' access to this device cameras?</string>
     <string name="allow_button">Allow</string>
     <string name="allow_always_button">Allow always</string>
     <string name="deny_button">Deny</string>
     <string name="deny_always_button">Deny always</string>
+
+    <!-- Preference Titles -->
+    <string name="title_activity_settings">Application Settings</string>
+    <string name="security_header">Security</string>
+
+    <!-- Sync Preferences -->
+    <string name="private_key">Private key</string>
+    <string name="title_private_key_password_request">Enter keystore password</string>
+    <string name="hint_private_key_password">Password</string>
+    <string name="title_private_key_removal_request">Do you really want to remove the private key?</string>
+    <string name="message_private_key_removal_request">This operation cannot be undone. You will have to import a private key again in order to enable traffic ciphering</string>
+    <string name="private_key_summary_click_to_load">Tap here to choose a private key file to import</string>
+    <string name="private_key_summary_imported">Private key imported. Tap here to remove.</string>
+    <string name="private_key_summary_not_found">Chosen file not found</string>
+    <string name="private_key_summary_invalid">Invalid private key file chosen</string>
+    <string name="private_key_summary_error">Something went wrong while loading private key</string>
+    <string name="private_key_summary_password">Unable to recover a private key. Probably password is wrong</string>
+    <string name="private_key_summary_storing">Error installing private key</string>
+    <string name="private_key_summary_removing">Private key entry cannot be removed</string>
+
+    <!-- Preference Keys -->
+    <string name="pref_key_private_key" translatable="false">private_key</string>
 </resources>

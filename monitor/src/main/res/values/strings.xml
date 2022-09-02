@@ -7,6 +7,14 @@
     <string name="cancel_connection_button">Cancel</string>
     <string name="disconnect_button">Disconnect</string>
 
+    <string name="title_untrusted_connection_request">No trusted certificates imported</string>
+    <string name="message_untrusted_connection_request_no_certificate_imported">Please import the server certificate to make it trusted. Do you want to accept the risk of security breach and continue?</string>
+    <string name="message_untrusted_connection_request_certificate_doesnt_match">This might indicate a person-in-the-middle attack. Do you want to accept the risk of security breach and continue?</string>
+    <string name="title_insecure_connection_request">You\'re establishing an insecure connection</string>
+    <string name="message_insecure_connection_request">Server you\'re connecting to doesn\'t support SSL connection. Media stream will be encrypted in a weak way. Do you want to accept the risk of security breach and continue?</string>
+
+    <string name="settings_button">Settings</string>
+
     <string name="rotate_ccw" translatable="false">\u21b3\u21b0</string>
     <string name="rotate_cw" translatable="false">\u21b1\u21b2</string>
 
@@ -27,4 +35,27 @@
     <string name="unknown_command">Unknown command received: %d</string>
     <string name="invalid_command">Invalid command %1$s received of length %2$s</string>
     <string name="malformed_command">Malformed command %1$s received with arguments: %2$s</string>
+
+    <!-- Settings Activity Title -->
+    <string name="title_activity_settings">Settings</string>
+
+    <!-- Preference Titles -->
+    <string name="header_security">Security</string>
+
+    <!-- Certificate Preferences -->
+    <string name="title_certificate">Trusted server certificate</string>
+    <string name="title_certificate_removal_request">Do you really want to remove the selected certificate?</string>
+    <string name="message_certificate_removal_request">This operation cannot be undone. You will have to import a certificate again in order to use trusted ciphering</string>
+
+    <string name="certificate_summary_click_to_load">Tap here to choose a certificate file to import</string>
+    <string name="certificate_summary_imported">Certificate imported. Tap here to remove.</string>
+    <string name="certificate_summary_not_found">Chosen file not found</string>
+    <string name="certificate_summary_invalid">Invalid certificate file chosen</string>
+    <string name="certificate_summary_error">Something went wrong while loading certificate</string>
+    <string name="certificate_summary_storing">Error installing certificate</string>
+    <string name="certificate_summary_removing">Certificate entry cannot be removed</string>
+
+    <!-- Preference Keys -->
+    <string name="pref_key_certificate" translatable="false">certificate</string>
+
 </resources>

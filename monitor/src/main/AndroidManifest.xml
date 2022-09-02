@@ -16,6 +16,10 @@
         android:theme="@style/Theme.P2PMonitoring"
         tools:targetApi="s">
         <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings" />
+        <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:exported="true"

@@ -1,16 +1,19 @@
 package ru.coolsoft.p2pmonitor;
 
+import static ru.coolsoft.common.Constants.ALIAS_MONITORING;
+import static ru.coolsoft.common.Constants.ANDROID_KEY_STORE;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SECURITY_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_OK;
 import static ru.coolsoft.common.Constants.CIPHER_ALGORITHM;
 import static ru.coolsoft.common.Constants.CIPHER_IV;
 import static ru.coolsoft.common.Constants.CIPHER_IV_CHARSET;
 import static ru.coolsoft.common.Constants.CIPHER_TRANSFORMATION;
+import static ru.coolsoft.common.Constants.SSL_PROTOCOL;
 import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.Protocol.END_OF_STREAM;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
-import static ru.coolsoft.common.StreamId.AUTHENTICATION;
-import static ru.coolsoft.common.StreamId.CONTROL;
+import static ru.coolsoft.common.enums.StreamId.AUTHENTICATION;
+import static ru.coolsoft.common.enums.StreamId.CONTROL;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.AUTH_ERROR;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CONNECTION_CLOSED;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.ERROR_CLOSING;
@@ -18,10 +21,14 @@ import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.HOST_UN
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.SOCKET_INITIALIZATION_ERROR;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.STREAMING_ERROR;
 
+import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.os.OperationCanceledException;
 import android.util.Log;
+
+import androidx.core.util.Consumer;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -35,24 +42,37 @@ import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 
 import javax.crypto.Cipher;
 import javax.crypto.CipherInputStream;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 import ru.coolsoft.common.BlockCipherOutputStream;
-import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Defaults;
 import ru.coolsoft.common.Protocol;
-import ru.coolsoft.common.StreamId;
+import ru.coolsoft.common.enums.Command;
+import ru.coolsoft.common.enums.StreamId;
 
 public class StreamingClient extends Thread {
     private static final String LOG_TAG = StreamingClient.class.getSimpleName();
+    private static final String INSECURE_CONNECTION_FALLBACK_SUFFIX = ". Trying insecure connection";
 
     private final EventListener eventListener;
     private final Handler handler;
@@ -67,6 +87,8 @@ public class StreamingClient extends Thread {
 
     private byte[] mSha;
 
+    private Semaphore userInteractionSemaphore = new Semaphore(0);
+
     public StreamingClient(String address, EventListener listener) {
         serverAddress = address;
         eventListener = listener;
@@ -74,7 +96,7 @@ public class StreamingClient extends Thread {
         handlerThread = new HandlerThread(StreamingClient.class.getSimpleName());
         handlerThread.start();
         handler = new Handler(handlerThread.getLooper(),
-                createSendRoutine(streamId -> streamId == AUTHENTICATION ? out : cout));
+                createSendRoutine(streamId -> streamId == AUTHENTICATION ? out : (cout == null ? out : cout)));
     }
 
     public void logIn(String login, String password) {
@@ -109,12 +131,11 @@ public class StreamingClient extends Thread {
         }
 
         try {
-            socket = new Socket();
-            socket.connect(new InetSocketAddress(address, Defaults.SERVER_PORT));
+            createSocket(address);
             in = socket.getInputStream();
             out = socket.getOutputStream();
             eventListener.onConnected();
-        } catch (IOException e) {
+        } catch (IOException | OperationCanceledException e) {
             eventListener.onError(SOCKET_INITIALIZATION_ERROR, null, e);
             terminateAndCleanup();
             return;
@@ -203,18 +224,135 @@ public class StreamingClient extends Thread {
         }
     }
 
+    private final boolean[] insecureConnectionDecisionContainer = new boolean[1];
+
+    private void createSocket(InetAddress address) throws IOException {
+        SSLSocket secureSocket = createSecureSocket(address);
+        if (secureSocket != null) {
+            try {
+                secureSocket.startHandshake();
+                socket = secureSocket;
+                return;
+            } catch (IOException e) {
+                //Possible reasons:
+                // javax.net.ssl.SSLHandshakeException: java.security.cert.CertPathValidatorException: Trust anchor for certification path not found.
+                //  Caused by: java.security.cert.CertificateException: java.security.cert.CertPathValidatorException: Trust anchor for certification path not found.
+                //      Caused by: java.security.cert.CertPathValidatorException: Trust anchor for certification path not found
+                // javax.net.ssl.SSLHandshakeException: SSL handshake aborted: ssl=0x9c6a8280: I/O error during system call, Connection reset by peer
+                Log.w(LOG_TAG, "SSL handshake failed" + INSECURE_CONNECTION_FALLBACK_SUFFIX, e);
+            }
+        }
+
+        eventListener.requestInsecureConnectionConfirmation();
+        userInteractionSemaphore.acquireUninterruptibly();
+        if (!insecureConnectionDecisionContainer[0]) {
+            throw new OperationCanceledException("Non secure connection cancelled by user");
+        }
+
+        socket = new Socket();
+        socket.connect(new InetSocketAddress(address, Defaults.SERVER_PORT));
+    }
+
+    private final SSLContext[] secureContextContainer = new SSLContext[1];
+    private final Consumer<TrustManager[]> trustManagerConsumer = trustManagers -> {
+        if (trustManagers != null && trustManagers.length > 0) {
+            try {
+                secureContextContainer[0].init(null, trustManagers, null);
+            } catch (KeyManagementException e) {
+                Log.w(LOG_TAG, "SSLContext initialization failed" + INSECURE_CONNECTION_FALLBACK_SUFFIX, e);
+            }
+        } else {
+            secureContextContainer[0] = null;
+        }
+        userInteractionSemaphore.release();
+    };
+
+    private SSLSocket createSecureSocket(InetAddress address) throws IOException {
+        try {
+            secureContextContainer[0] = SSLContext.getInstance(SSL_PROTOCOL);
+            provideTrustManager(trustManagerConsumer);
+        } catch (NoSuchAlgorithmException e) {
+            Log.w(LOG_TAG, "Protocol initialization failed" + INSECURE_CONNECTION_FALLBACK_SUFFIX, e);
+            return null;
+        } catch (CertificateException | KeyStoreException e) {
+            Log.w(LOG_TAG, "TrustManager initialization failed" + INSECURE_CONNECTION_FALLBACK_SUFFIX, e);
+            return null;
+        }
+
+        userInteractionSemaphore.acquireUninterruptibly();
+        if (secureContextContainer[0] == null) {
+            throw new OperationCanceledException("Untrusted connection cancelled by user");
+        }
+
+        SSLSocketFactory SocketFactory = secureContextContainer[0].getSocketFactory();
+        //ToDo: handle certificate mismatch case not to fall back to insecure socket, but report a security violation
+        return (SSLSocket) SocketFactory.createSocket(address, Defaults.SERVER_PORT);
+    }
+
+    private void provideTrustManager(Consumer<TrustManager[]> resultConsumer) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
+        KeyStore ksAndroid = KeyStore.getInstance(ANDROID_KEY_STORE);
+        ksAndroid.load(null);
+        if (ksAndroid.isCertificateEntry(ALIAS_MONITORING)) {
+            TrustManagerFactory trustMgrFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            trustMgrFactory.init(ksAndroid);
+            for (TrustManager trustManager : trustMgrFactory.getTrustManagers()) {
+                if (trustManager instanceof X509TrustManager) {
+                    resultConsumer.accept(new X509TrustManager[]{(X509TrustManager) trustManager});
+                    return;
+                }
+            }
+        }
+
+        eventListener.requestUntrustedConnectionConfirmation(EventListener.UntrustedConnectionCase.NO_CERTIFICATE);
+    }
+
+    public void onInsecureConnectionDecision(boolean decision) {
+        insecureConnectionDecisionContainer[0] = decision;
+        userInteractionSemaphore.release();
+    }
+
+    @SuppressLint("CustomX509TrustManager")
+    public void onUntrustedConnectionDecision(boolean decision) {
+        if (decision) {
+            trustManagerConsumer.accept(new TrustManager[]{
+                    new X509TrustManager() {
+                        @SuppressLint("TrustAllX509TrustManager")
+                        @Override
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        @SuppressLint("TrustAllX509TrustManager")
+                        @Override
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        @Override
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return null;
+                        }
+                    }
+            });
+        } else {
+            trustManagerConsumer.accept(null);
+        }
+    }
+
     public boolean isAuthorized() {
         return cout != null;
     }
 
     public void terminate() {
         if (socket != null) {
-            try {
-                socket.close();
-            } catch (IOException e) {
-                eventListener.onError(ERROR_CLOSING, null, e);
-            }
-            socket = null;
+            handler.post(() -> {
+                if (socket != null) {
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        eventListener.onError(ERROR_CLOSING, null, e);
+                    }
+                    socket = null;
+                }
+            });
         }
     }
 
@@ -283,6 +421,15 @@ public class StreamingClient extends Thread {
             CONNECTION_CLOSED,
             ERROR_CLOSING
         }
+
+        enum UntrustedConnectionCase {
+            NO_CERTIFICATE,
+            CERTIFICATE_DOENT_MATCH
+        }
+
+        void requestUntrustedConnectionConfirmation(UntrustedConnectionCase certificateCase);
+
+        void requestInsecureConnectionConfirmation();
 
         void onConnected();
 

@@ -13,6 +13,7 @@ import static ru.coolsoft.common.Protocol.MEDIA_BUFFER_SIZE;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodec;
 import android.media.MediaFormat;
@@ -32,6 +33,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -46,8 +48,9 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import ru.coolsoft.common.Command;
-import ru.coolsoft.common.Flashlight;
+import ru.coolsoft.common.enums.Command;
+import ru.coolsoft.common.enums.Flashlight;
+import ru.coolsoft.common.ui.ConfirmationDialogFragment;
 import ru.coolsoft.p2pmonitor.databinding.ActivityMainBinding;
 
 /**
@@ -62,6 +65,9 @@ public class MainActivity extends AppCompatActivity {
     private static final int UI_ANIMATION_DELAY = 300;
     private static final String LOG_TAG = "P2PMonitor";
     private final DateFormat datetimeFormat;
+
+    private static final String DIALOG_KEY_UNTRUSTED = "untrusted";
+    private static final String DIALOG_KEY_INSECURE = "insecure";
 
     {
         DateFormat format = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.LONG);
@@ -110,21 +116,6 @@ public class MainActivity extends AppCompatActivity {
     private Button mFlashButton;
     private TextView mTimestamp;
 
-    private final Runnable mShowPart2Runnable = new Runnable() {
-        @Override
-        public void run() {
-            // Delayed display of UI elements
-            ActionBar actionBar = getSupportActionBar();
-            if (actionBar != null) {
-                actionBar.show();
-            }
-            if (client == null) {
-                mControlsView.setVisibility(View.VISIBLE);
-            }
-        }
-    };
-
-    private boolean mVisible;
     private final Runnable mHideRunnable = this::hideConnectionControls;
 
     private EditText mAddressEdit;
@@ -169,6 +160,31 @@ public class MainActivity extends AppCompatActivity {
     private final StreamingClient.EventListener eventListener = new StreamingClient.EventListener() {
 
         @Override
+        public void requestUntrustedConnectionConfirmation(UntrustedConnectionCase certificateCase) {
+            @StringRes int[] message = new int[1];
+            switch (certificateCase) {
+                case NO_CERTIFICATE:
+                    message[0] = R.string.message_untrusted_connection_request_no_certificate_imported;
+                    break;
+                case CERTIFICATE_DOENT_MATCH:
+                    message[0] = R.string.message_untrusted_connection_request_certificate_doesnt_match;
+                    break;
+            }
+            runOnUiThread(() -> new ConfirmationDialogFragment(
+                    R.string.title_untrusted_connection_request, message[0],
+                    DIALOG_KEY_UNTRUSTED)
+                    .show(getSupportFragmentManager(), ConfirmationDialogFragment.DIALOG_CONFIRMATION));
+        }
+
+        @Override
+        public void requestInsecureConnectionConfirmation() {
+            runOnUiThread(() -> new ConfirmationDialogFragment(
+                    R.string.title_insecure_connection_request, R.string.message_insecure_connection_request,
+                    DIALOG_KEY_INSECURE)
+                    .show(getSupportFragmentManager(), ConfirmationDialogFragment.DIALOG_CONFIRMATION));
+        }
+
+        @Override
         public void onConnected() {
             runOnUiThread(() -> {
                 mAuthControls.setVisibility(View.VISIBLE);
@@ -187,7 +203,7 @@ public class MainActivity extends AppCompatActivity {
                 mAuthControls.setVisibility(View.GONE);
                 mCameraControls.setVisibility(View.INVISIBLE);
                 restoreConnectControls();
-                showConnectionControls();
+                mControlsView.setVisibility(View.VISIBLE);
             });
         }
 
@@ -362,6 +378,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void confirmationListener(@NonNull String requestKey, @NonNull Bundle result) {
+        boolean decision = result.getBoolean(Boolean.class.getSimpleName());
+        switch (requestKey) {
+            case DIALOG_KEY_UNTRUSTED:
+                client.onUntrustedConnectionDecision(decision);
+                break;
+            case DIALOG_KEY_INSECURE:
+                client.onInsecureConnectionDecision(decision);
+                break;
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -371,7 +399,6 @@ public class MainActivity extends AppCompatActivity {
         ActivityMainBinding binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        mVisible = true;
         mControlsView = binding.connectionControls;
 
         mAddressEdit = binding.addressEdit;
@@ -393,8 +420,8 @@ public class MainActivity extends AppCompatActivity {
                 (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
                         updateTextureLayout(right - left, bottom - top));
 
-        // Set up the user interaction to manually show or hide the system UI.
-        mTextureView.setOnClickListener(view -> toggle());
+        getSupportFragmentManager().setFragmentResultListener(DIALOG_KEY_UNTRUSTED, this, this::confirmationListener);
+        getSupportFragmentManager().setFragmentResultListener(DIALOG_KEY_INSECURE, this, this::confirmationListener);
     }
 
     @Override
@@ -585,14 +612,6 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    private void toggle() {
-        if (mVisible) {
-            hideConnectionControls();
-        } else {
-            showConnectionControls();
-        }
-    }
-
     private void hideConnectionControls() {
         // Hide UI first
         ActionBar actionBar = getSupportActionBar();
@@ -602,22 +621,10 @@ public class MainActivity extends AppCompatActivity {
         if (client != null && client.isAuthorized()) {
             mControlsView.setVisibility(View.GONE);
         }
-        mVisible = false;
 
         // Schedule a runnable to remove the status and navigation bar after a delay
-        mHideHandler.removeCallbacks(mShowPart2Runnable);
-        mHideHandler.postDelayed(mHidePart2Runnable, UI_ANIMATION_DELAY);
-    }
-
-    private void showConnectionControls() {
-        // Show the system bar
-        mTextureView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        mVisible = true;
-
-        // Schedule a runnable to display UI elements after a delay
         mHideHandler.removeCallbacks(mHidePart2Runnable);
-        mHideHandler.postDelayed(mShowPart2Runnable, UI_ANIMATION_DELAY);
+        mHideHandler.postDelayed(mHidePart2Runnable, UI_ANIMATION_DELAY);
     }
 
     /**
@@ -627,6 +634,10 @@ public class MainActivity extends AppCompatActivity {
     private void delayedHide() {
         mHideHandler.removeCallbacks(mHideRunnable);
         mHideHandler.postDelayed(mHideRunnable, 100);
+    }
+
+    public void onSettingsClicked(View view) {
+        startActivity(new Intent(getApplicationContext(), SettingsActivity.class));
     }
 
     public void onConnectClicked(View view) {

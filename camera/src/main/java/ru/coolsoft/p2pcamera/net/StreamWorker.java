@@ -1,4 +1,4 @@
-package ru.coolsoft.p2pcamera;
+package ru.coolsoft.p2pcamera.net;
 
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_OK;
@@ -9,12 +9,12 @@ import static ru.coolsoft.common.Constants.CIPHER_TRANSFORMATION;
 import static ru.coolsoft.common.Constants.UNUSED;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
 import static ru.coolsoft.common.Protocol.readData;
-import static ru.coolsoft.common.StreamId.AUTHENTICATION;
-import static ru.coolsoft.common.StreamId.CONTROL;
-import static ru.coolsoft.common.StreamId.MEDIA;
-import static ru.coolsoft.p2pcamera.StreamingServer.Situation.CLIENT_STREAMING_ERROR;
-import static ru.coolsoft.p2pcamera.StreamingServer.Situation.CONNECTION_CLOSED;
-import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
+import static ru.coolsoft.common.enums.StreamId.AUTHENTICATION;
+import static ru.coolsoft.common.enums.StreamId.CONTROL;
+import static ru.coolsoft.common.enums.StreamId.MEDIA;
+import static ru.coolsoft.p2pcamera.net.StreamingServer.Situation.CLIENT_STREAMING_ERROR;
+import static ru.coolsoft.p2pcamera.net.StreamingServer.Situation.CONNECTION_CLOSED;
+import static ru.coolsoft.p2pcamera.net.StreamingServer.Situation.UNKNOWN_COMMAND;
 
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -40,10 +40,10 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 import ru.coolsoft.common.BlockCipherOutputStream;
-import ru.coolsoft.common.Command;
 import ru.coolsoft.common.Constants;
-import ru.coolsoft.common.StreamId;
-import ru.coolsoft.p2pcamera.StreamingServer.EventListener;
+import ru.coolsoft.common.enums.Command;
+import ru.coolsoft.common.enums.StreamId;
+import ru.coolsoft.p2pcamera.net.StreamingServer.EventListener;
 
 public class StreamWorker extends Thread {
     private static final String LOG_TAG = StreamWorker.class.getSimpleName();
@@ -77,7 +77,7 @@ public class StreamWorker extends Thread {
         handlerThread = new HandlerThread(StreamWorker.class.getSimpleName());
         handlerThread.start();
         handler = new Handler(handlerThread.getLooper(),
-                createSendRoutine(streamId -> streamId == AUTHENTICATION ? out : cout));
+                createSendRoutine(streamId -> streamId == AUTHENTICATION ? out : (cout == null ? out : cout)));
         running = true;
     }
 

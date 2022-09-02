@@ -7,7 +7,7 @@ import static ru.coolsoft.common.Constants.CIPHER_ALGORITHM;
 import static ru.coolsoft.common.Constants.CIPHER_IV;
 import static ru.coolsoft.common.Constants.CIPHER_IV_CHARSET;
 import static ru.coolsoft.common.Constants.CIPHER_TRANSFORMATION;
-import static ru.coolsoft.common.StreamId.PADDING;
+import static ru.coolsoft.common.enums.StreamId.PADDING;
 
 import org.junit.Test;
 

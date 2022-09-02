@@ -7,6 +7,9 @@ import java.lang.annotation.RetentionPolicy;
 
 public class Constants {
     public static final int AUTH_OK = 0;
+    public static final String ANDROID_KEY_STORE = "AndroidKeyStore";
+    public static final String ALIAS_MONITORING = "pk";
+    public static final String SSL_PROTOCOL = "TLSv1.2";
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({

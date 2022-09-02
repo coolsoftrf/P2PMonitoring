@@ -1,4 +1,4 @@
-package ru.coolsoft.p2pcamera;
+package ru.coolsoft.p2pcamera.ui;
 
 import static android.content.DialogInterface.BUTTON_NEGATIVE;
 import static android.content.DialogInterface.BUTTON_NEUTRAL;
@@ -14,6 +14,8 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 
 import java.net.InetSocketAddress;
+
+import ru.coolsoft.p2pcamera.R;
 
 public class AuthorizationDialogFragment extends DialogFragment {
     public static final String TAG_PREFIX = "autorize.";

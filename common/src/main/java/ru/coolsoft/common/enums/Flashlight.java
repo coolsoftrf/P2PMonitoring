@@ -1,4 +1,4 @@
-package ru.coolsoft.common;
+package ru.coolsoft.common.enums;
 
 import ru.coolsoft.annotations.ById;
 import ru.coolsoft.annotations.ByIdDefault;

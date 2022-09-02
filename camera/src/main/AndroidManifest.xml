@@ -23,7 +23,11 @@
         android:usesCleartextTraffic="true"
         tools:targetApi="s">
         <activity
-            android:name="ru.coolsoft.p2pcamera.MainActivity"
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:label="@string/title_activity_settings" />
+        <activity
+            android:name=".ui.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             tools:ignore="LockedOrientationActivity">

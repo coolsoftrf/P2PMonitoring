@@ -7,10 +7,18 @@
     <string name="cancel_connection_button">Отмена</string>
     <string name="disconnect_button">Отключиться</string>
 
+    <string name="title_untrusted_connection_request">Не обнаружено доверенных сертификатов сервера</string>
+    <string name="message_untrusted_connection_request_no_certificate_imported">Загрузите файл сертификата чтобы сделать его доверенным. Вы принимате риск возможного нарушения безопасности и хотите продолжить?</string>
+    <string name="message_untrusted_connection_request_certificate_doesnt_match">Возможно вас прослушивают. Вы принимате риск возможного нарушения безопасности и хотите продолжить?</string>
+    <string name="title_insecure_connection_request">Устанавливается небезопасное соединение</string>
+    <string name="message_insecure_connection_request">Этот сервер не поддержвает SSL-подключений. Поток будет зашифрован ненадёжним способом. Вы принимате риск возможного нарушения безопасности и хотите продолжить?</string>
+
     <string name="torch_on_button">Подсветка: вкл</string>
     <string name="torch_off_button">Подсветка: выкл</string>
     <string name="torch_unavailable">Подсветка</string>
     <string name="dummy_button">заглушка</string>
+
+    <string name="settings_button">Настройки</string>
 
     <string name="empty_credentials">Введите имя пользователя и пароль</string>
     <string name="wrong_credentials">Неверное имя пользователя или пароль</string>
@@ -24,5 +32,24 @@
     <string name="unknown_command">Неизвестная команда: %d</string>
     <string name="invalid_command">Неверная команда %1$s длины %2$s</string>
     <string name="malformed_command">У команды %1$s неверный аргумент: %2$s</string>
+
+    <!-- Settings Activity Title -->
+    <string name="title_activity_settings">Настройки</string>
+
+    <!-- Preference Titles -->
+    <string name="header_security">Безопасность</string>
+
+    <!-- Certificate Preferences -->
+    <string name="title_certificate">Сертификат доверенного сервера</string>
+    <string name="title_certificate_removal_request">Действительно удалить сертификат?</string>
+    <string name="message_certificate_removal_request">Эта операция необратима. Чтобы доверять этому серверу потребуется заново загрузить файл ключа</string>
+
+    <string name="certificate_summary_click_to_load">Нажмите чтобы загрузить файл сертификата</string>
+    <string name="certificate_summary_imported">Сертификат установлен. Нажмите чтобы удалить.</string>
+    <string name="certificate_summary_not_found">Выбранный файл не найден</string>
+    <string name="certificate_summary_invalid">Выбран неверный файл сертификата</string>
+    <string name="certificate_summary_error">Ошибка загрузки сертификата</string>
+    <string name="certificate_summary_storing">Ошибка установки сертификата</string>
+    <string name="certificate_summary_removing">Ошибка удаления сертификата</string>
 
 </resources>

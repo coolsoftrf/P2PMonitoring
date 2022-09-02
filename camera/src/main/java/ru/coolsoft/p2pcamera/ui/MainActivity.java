@@ -1,10 +1,8 @@
-package ru.coolsoft.p2pcamera;
+package ru.coolsoft.p2pcamera.ui;
 
 import static android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE;
 import static android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP;
 import static android.util.Base64.DEFAULT;
-import static ru.coolsoft.common.Command.AVAILABILITY;
-import static ru.coolsoft.common.Command.FORMAT;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_NOT_ALLOWED;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_WRONG_CREDENTIALS;
@@ -12,14 +10,17 @@ import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
 import static ru.coolsoft.common.Constants.CAMERA_UNAVAILABLE;
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
 import static ru.coolsoft.common.Constants.SIZEOF_LONG;
-import static ru.coolsoft.p2pcamera.AuthorizationDialogFragment.ADDRESS_KEY;
-import static ru.coolsoft.p2pcamera.AuthorizationDialogFragment.RESULT_KEY;
-import static ru.coolsoft.p2pcamera.AuthorizationDialogFragment.USER_KEY;
-import static ru.coolsoft.p2pcamera.StreamingServer.Situation.UNKNOWN_COMMAND;
+import static ru.coolsoft.common.enums.Command.AVAILABILITY;
+import static ru.coolsoft.common.enums.Command.FORMAT;
+import static ru.coolsoft.p2pcamera.net.StreamingServer.Situation.UNKNOWN_COMMAND;
+import static ru.coolsoft.p2pcamera.ui.AuthorizationDialogFragment.ADDRESS_KEY;
+import static ru.coolsoft.p2pcamera.ui.AuthorizationDialogFragment.RESULT_KEY;
+import static ru.coolsoft.p2pcamera.ui.AuthorizationDialogFragment.USER_KEY;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
@@ -41,6 +42,7 @@ import android.util.Log;
 import android.util.Size;
 import android.view.Menu;
 import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.Surface;
 import android.view.TextureView;
 import android.widget.TextView;
@@ -49,6 +51,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.util.Consumer;
 import androidx.fragment.app.FragmentResultListener;
 
 import org.bitlet.weupnp.GatewayDevice;
@@ -72,18 +75,24 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import ru.coolsoft.common.Command;
-import ru.coolsoft.common.Flashlight;
-import ru.coolsoft.p2pcamera.StreamingServer.EventListener;
+import ru.coolsoft.common.Supplier;
+import ru.coolsoft.common.enums.Command;
+import ru.coolsoft.common.enums.Flashlight;
+import ru.coolsoft.p2pcamera.CameraService;
+import ru.coolsoft.p2pcamera.R;
+import ru.coolsoft.p2pcamera.SecurityManager;
 import ru.coolsoft.p2pcamera.databinding.ActivityMainBinding;
+import ru.coolsoft.p2pcamera.net.PortMappingServer;
+import ru.coolsoft.p2pcamera.net.StreamWorker;
+import ru.coolsoft.p2pcamera.net.StreamingServer;
+import ru.coolsoft.p2pcamera.net.StreamingServer.EventListener;
 
 public class MainActivity extends AppCompatActivity {
     private static final String LOG_TAG = "P2PCamera";
     private static final int REQUEST_CODE_CAMERA = 1;
 
     private final String DEFAULT_CAMERA_ID = "0";
-    //ToDo: move clients
-    // - to service layer
+    //ToDo: move clients to service layer
     private final List<ClientInfo> clients = new ArrayList<>();
 
     private CameraManager mCameraManager = null;
@@ -328,7 +337,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (!startupMtx.invert(transformMtx)) {
-                Log.w(LOG_TAG, "irreversible matrix!");
+                Log.w(LOG_TAG, "matrix irreversible!");
                 return;
             }
             transformMtx.postConcat(matrix);
@@ -350,6 +359,15 @@ public class MainActivity extends AppCompatActivity {
                 camera.openCamera();
             }
         });
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == R.id.prefs) {
+            startActivity(new Intent(getApplicationContext(), SettingsActivity.class));
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
@@ -388,17 +406,17 @@ public class MainActivity extends AppCompatActivity {
         return mCameras != null ? mCameras.get(cameraId) : null;
     }
 
-    private <T> T ifCameraInitialized(String cameraId, CameraFunction<T> function, T otherwise) {
+    private <T> T ifCameraInitialized(String cameraId, Supplier<T, CameraService> function, T otherwise) {
         CameraService camera;
         return (camera = isCameraInitialized(cameraId)) != null
-                ? function.call(camera)
+                ? function.get(camera)
                 : otherwise;
     }
 
-    private void ifCameraInitialized(String cameraId, CameraConsumer consumer) {
+    private void ifCameraInitialized(String cameraId, Consumer<CameraService> consumer) {
         CameraService camera;
         if ((camera = isCameraInitialized(cameraId)) != null) {
-            consumer.consume(camera);
+            consumer.accept(camera);
         }
     }
 
@@ -557,6 +575,7 @@ public class MainActivity extends AppCompatActivity {
             SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
             switch (sm.getUserAccess(user)) {
                 case GRANTED:
+                    //FixMe: Don't expect shadow in this flow, but send encrypted confirmation instead
                     worker.onAuthorized();
                     break;
                 case DENIED:
@@ -691,14 +710,6 @@ public class MainActivity extends AppCompatActivity {
         } catch (InterruptedException e) {
             Log.e(LOG_TAG, "background thread interrupted", e);
         }
-    }
-
-    private interface CameraFunction<T> {
-        T call(CameraService camera);
-    }
-
-    private interface CameraConsumer {
-        void consume(CameraService camera);
     }
 
     private static class ClientInfo {

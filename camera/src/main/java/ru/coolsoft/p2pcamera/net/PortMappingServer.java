@@ -1,4 +1,4 @@
-package ru.coolsoft.p2pcamera;
+package ru.coolsoft.p2pcamera.net;
 
 import android.os.Handler;
 import android.os.HandlerThread;

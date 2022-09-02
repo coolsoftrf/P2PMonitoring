@@ -1,7 +1,8 @@
-package ru.coolsoft.p2pcamera;
+package ru.coolsoft.p2pcamera.net;
 
+import static ru.coolsoft.common.Constants.SSL_PROTOCOL;
 import static ru.coolsoft.common.Defaults.SERVER_PORT;
-import static ru.coolsoft.p2pcamera.PortMappingServer.PortMappingProtocol.TCP;
+import static ru.coolsoft.p2pcamera.net.PortMappingServer.PortMappingProtocol.TCP;
 
 import android.util.Log;
 
@@ -15,13 +16,30 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Map;
 
-import ru.coolsoft.common.Command;
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509KeyManager;
+import javax.net.ssl.X509TrustManager;
+
+import ru.coolsoft.common.Constants;
+import ru.coolsoft.common.enums.Command;
 
 public class StreamingServer extends Thread {
     private final static String LOG_TAG = StreamingServer.class.getSimpleName();
+    private final static String INSECURE_SERVER_FALLBACK_SUFFIX = ". Starting an insecure socket server";
 
     private boolean running = false;
     private ServerSocket serverSocket;
@@ -123,7 +141,7 @@ public class StreamingServer extends Thread {
     @Override
     public void run() {
         try {
-            serverSocket = new ServerSocket(SERVER_PORT);
+            serverSocket = createServerSocket();
             running = true;
 
             while (running) {
@@ -135,6 +153,100 @@ public class StreamingServer extends Thread {
         } catch (IOException e) {
             Log.i(LOG_TAG, "I/O interrupted while waiting for a connection", e);
         }
+    }
+
+    private ServerSocket createServerSocket() throws IOException {
+        boolean keyImported;
+        KeyStore ksAndroid;
+        try {
+            ksAndroid = KeyStore.getInstance(Constants.ANDROID_KEY_STORE);
+            ksAndroid.load(null);
+            keyImported = ksAndroid.isKeyEntry(Constants.ALIAS_MONITORING);
+        } catch (KeyStoreException | CertificateException | IOException | NoSuchAlgorithmException e) {
+            Log.w(LOG_TAG, e);
+            keyImported = false;
+            ksAndroid = null;
+        }
+
+        SSLContext ctx;
+        if (keyImported) {
+            ctx = getSecureContext(ksAndroid);
+        } else {
+            ctx = null;
+            Log.i(LOG_TAG, "Private key not found" + INSECURE_SERVER_FALLBACK_SUFFIX);
+        }
+
+        if (!keyImported || ctx == null) {
+            return new ServerSocket(SERVER_PORT);
+        }
+
+        SSLServerSocketFactory socketFactory = ctx.getServerSocketFactory();
+        Log.i(LOG_TAG, "Starting an SSL socket server");
+        return socketFactory.createServerSocket(SERVER_PORT);
+    }
+
+    private SSLContext getSecureContext(KeyStore ks) {
+        X509TrustManager[] tms;
+        try {
+            tms = getTrustManagers(ks);
+        } catch (NoSuchAlgorithmException e) {
+            Log.w(LOG_TAG, "Algorithm not supported by TrustManagerFactory" + INSECURE_SERVER_FALLBACK_SUFFIX, e);
+            return null;
+        } catch (KeyStoreException e) {
+            Log.w(LOG_TAG, "TrustManagerFactory initialization failed" + INSECURE_SERVER_FALLBACK_SUFFIX, e);
+            return null;
+        }
+
+        X509KeyManager[] kms;
+        try {
+            kms = getKeyManagers(ks);
+        } catch (NoSuchAlgorithmException e) {
+            Log.w(LOG_TAG, "Algorithm not supported by KeyManagerFactory" + INSECURE_SERVER_FALLBACK_SUFFIX, e);
+            return null;
+        } catch (KeyStoreException e) {
+            Log.w(LOG_TAG, "KeyManagerFactory initialization failed" + INSECURE_SERVER_FALLBACK_SUFFIX, e);
+            return null;
+        } catch (UnrecoverableKeyException e) {
+            Log.w(LOG_TAG, "Key recovery failed" + INSECURE_SERVER_FALLBACK_SUFFIX, e);
+            return null;
+        }
+
+        SSLContext ctx;
+        try {
+            ctx = SSLContext.getInstance(SSL_PROTOCOL);
+            ctx.init(kms, tms, null);
+        } catch (NoSuchAlgorithmException e) {
+            Log.w(LOG_TAG, "Protocol initialization failed" + INSECURE_SERVER_FALLBACK_SUFFIX, e);
+            return null;
+        } catch (KeyManagementException e) {
+            Log.w(LOG_TAG, "SSLContext initialization failed" + INSECURE_SERVER_FALLBACK_SUFFIX, e);
+            return null;
+        }
+
+        return ctx;
+    }
+
+    private static X509TrustManager[] getTrustManagers(KeyStore keystore) throws NoSuchAlgorithmException, KeyStoreException {
+        TrustManagerFactory trustMgrFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        trustMgrFactory.init(keystore);
+        for (TrustManager trustManager : trustMgrFactory.getTrustManagers()) {
+            if (trustManager instanceof X509TrustManager) {
+                return new X509TrustManager[]{(X509TrustManager) trustManager};
+            }
+        }
+        return null;
+    }
+
+    private static X509KeyManager[] getKeyManagers(KeyStore keystore)
+            throws NoSuchAlgorithmException, KeyStoreException, UnrecoverableKeyException {
+        KeyManagerFactory keyMgrFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        keyMgrFactory.init(keystore, null);
+        for (KeyManager keyManager : keyMgrFactory.getKeyManagers()) {
+            if (keyManager instanceof X509KeyManager) {
+                return new X509KeyManager[]{(X509KeyManager) keyManager};
+            }
+        }
+        return null;
     }
 
     public interface EventListener extends PortMappingServer.PortMappingListener {

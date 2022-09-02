@@ -9,9 +9,29 @@
     <string name="already_mapped_info">Адрес %1$s:%2$d уже занят устройством %3$s</string>
     <string name="mapping_error">Ошибка проброса порта: %s</string>
 
+    <!-- Authorization UI -->
     <string name="authorization_request">Разрешить \'%s\' доступ к камерам этого устройства?</string>
     <string name="allow_button">Разрешить</string>
     <string name="allow_always_button">Всегда разрешать</string>
     <string name="deny_button">Запретить</string>
     <string name="deny_always_button">Всегда запрещать</string>
+
+    <!-- Preference Titles -->
+    <string name="title_activity_settings">Настройки приложения</string>
+    <string name="security_header">Безопасность</string>
+
+    <!-- Sync Preferences -->
+    <string name="private_key">Закрытый ключ</string>
+    <string name="title_private_key_password_request">Введите пароль от выбранного файла хранилища</string>
+    <string name="hint_private_key_password">Пароль</string>
+    <string name="title_private_key_removal_request">Вы действительнохотите хотите удалить ключ?</string>
+    <string name="message_private_key_removal_request">Эта операция необратима. Чтобы вернуть шифрование потребуется заново загрузить файл ключа</string>
+    <string name="private_key_summary_imported">Закрытый ключ установлен. Нажмите чтобы удалить.</string>
+    <string name="private_key_summary_click_to_load">Нажмите чтобы загрузить файл закрытого ключа</string>
+    <string name="private_key_summary_not_found">Выбранный файл не найден</string>
+    <string name="private_key_summary_invalid">Выбран неверный файл закрытого ключа</string>
+    <string name="private_key_summary_error">Ошибка загрузки закрытого ключа</string>
+    <string name="private_key_summary_password">Ошибка загрузки ключа. Возможно, пароль неверен</string>
+    <string name="private_key_summary_storing">Ошибка установки ключа</string>
+    <string name="private_key_summary_removing">Ошибка удаления ключа</string>
 </resources>

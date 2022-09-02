@@ -27,6 +27,9 @@ android {
 }
 
 dependencies {
+    implementation 'androidx.activity:activity:1.5.1'
+    implementation 'androidx.fragment:fragment:1.5.2'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1'
     compileOnly project(':annotations')
     annotationProcessor project(':annotations')
     testImplementation 'junit:junit:4.13.2'
@@ -35,5 +38,6 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.4.0'
 
     //ToDo: Fix Bali plugin not to require this dependency for @ById annotations processing
+    //noinspection AnnotationProcessorOnCompilePath
     compileOnly 'org.projectlombok:lombok:1.18.24'
 }

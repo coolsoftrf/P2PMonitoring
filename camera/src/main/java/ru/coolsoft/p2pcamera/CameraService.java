@@ -188,7 +188,7 @@ public class CameraService {
         try {
             mCodec = MediaCodec.createEncoderByType(MIMETYPE_VIDEO_AVC); // H264
         } catch (Exception e) {
-            Log.w(LOG_TAG, "codec missing");
+            Log.w(LOG_TAG, "codec missing", e);
             return;
         }
 

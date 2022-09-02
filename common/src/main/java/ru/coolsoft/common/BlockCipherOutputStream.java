@@ -1,7 +1,7 @@
 package ru.coolsoft.common;
 
 import static ru.coolsoft.common.Constants.CIPHER_BLOCK_SIZE;
-import static ru.coolsoft.common.StreamId.PADDING;
+import static ru.coolsoft.common.enums.StreamId.PADDING;
 
 import java.io.FilterOutputStream;
 import java.io.IOException;

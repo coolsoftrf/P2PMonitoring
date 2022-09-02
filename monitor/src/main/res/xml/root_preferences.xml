@@ -1,0 +1,12 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/header_security">
+
+        <Preference
+            app:key="@string/pref_key_certificate"
+            app:title="@string/title_certificate"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

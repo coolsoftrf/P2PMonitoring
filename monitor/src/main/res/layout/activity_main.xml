@@ -201,7 +201,33 @@
                 android:background="@color/white_underlay"
                 android:paddingHorizontal="@dimen/default_margin_padding"
                 tools:text="YYYY-MM-DD HH:mm:ss" />
+
         </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|bottom"
+            android:orientation="vertical"
+            android:gravity="end">
+
+            <Button
+                android:id="@+id/settings_button"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:onClick="onSettingsClicked"
+                android:text="@string/settings_button"
+                tools:ignore="UsingOnClickInXml" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|bottom"
+                android:visibility="invisible"
+                tools:text="padding matching timestamp" />
+
+        </LinearLayout>
 
     </FrameLayout>
 
