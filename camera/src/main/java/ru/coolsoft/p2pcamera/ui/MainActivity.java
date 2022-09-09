@@ -5,7 +5,6 @@ import static android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFI
 import static android.util.Base64.DEFAULT;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_NOT_ALLOWED;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
-import static ru.coolsoft.common.Constants.AUTH_DENIED_WRONG_CREDENTIALS;
 import static ru.coolsoft.common.Constants.CAMERA_AVAILABLE;
 import static ru.coolsoft.common.Constants.CAMERA_UNAVAILABLE;
 import static ru.coolsoft.common.Constants.SIZEOF_INT;
@@ -63,13 +62,13 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.ProtocolException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -227,6 +226,7 @@ public class MainActivity extends AppCompatActivity {
         switch (decision) {
             case ALLOW_ALWAYS:
                 sm.setUserAccess(user, SecurityManager.UserAccess.GRANTED);
+                //fall through
             case ALLOW:
                 worker.onAuthorized();
                 break;
@@ -575,8 +575,14 @@ public class MainActivity extends AppCompatActivity {
             SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
             switch (sm.getUserAccess(user)) {
                 case GRANTED:
-                    //FixMe: Don't expect shadow in this flow, but send encrypted confirmation instead
-                    worker.onAuthorized();
+                    String sha = sm.getUserShadow(user);
+                    if (sha != null) {
+                        worker.onUserKnown(sha);
+                        reportCodecFormat(worker);
+                    } else {
+                        //hypothetical case when initial authorization is granted, but shadow was not yet saved
+                        worker.onAuthorized();
+                    }
                     break;
                 case DENIED:
                     worker.onAuthorizationFailed(AUTH_DENIED_NOT_ALLOWED);
@@ -589,7 +595,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onShadow(StreamWorker worker, byte[] shadow) {
+        public void onShadow(StreamWorker worker, byte[] shadow) throws IOException {
             ClientInfo clientInfo = new ClientInfo(worker);
             int clientIndex = clients.indexOf(clientInfo);
             if (clientIndex == -1) {
@@ -606,14 +612,14 @@ public class MainActivity extends AppCompatActivity {
             if (shadowPref == null) {
                 Log.d(LOG_TAG, String.format("Shadow initialized for user '%s':%s", user, shaStr));
                 sm.setUserShadow(user, shaStr);
-            } else if (!Arrays.equals(shadow, Base64.decode(shadowPref, DEFAULT))) {
-                Log.d(LOG_TAG, String.format("Access denied for user '%s' with shadow %s (against %s)",
-                        user, shaStr, shadowPref));
-                worker.onAuthorizationFailed(AUTH_DENIED_WRONG_CREDENTIALS);
-                return;
+            } else {
+                throw new ProtocolException("Unexpected shadow stage");
             }
             worker.onAuthorized();
+            reportCodecFormat(worker);
+        }
 
+        private void reportCodecFormat(StreamWorker worker) {
             ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::setUpMediaCodec);
 
             byte[] csdData = ifCameraInitialized(DEFAULT_CAMERA_ID,

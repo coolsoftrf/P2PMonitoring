@@ -4,6 +4,7 @@ import static ru.coolsoft.common.Constants.ALIAS_MONITORING;
 import static ru.coolsoft.common.Constants.ANDROID_KEY_STORE;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SECURITY_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_OK;
+import static ru.coolsoft.common.Constants.AUTH_OK_SKIP_SHA;
 import static ru.coolsoft.common.Constants.CIPHER_ALGORITHM;
 import static ru.coolsoft.common.Constants.CIPHER_IV;
 import static ru.coolsoft.common.Constants.CIPHER_IV_CHARSET;
@@ -87,7 +88,7 @@ public class StreamingClient extends Thread {
 
     private byte[] mSha;
 
-    private Semaphore userInteractionSemaphore = new Semaphore(0);
+    private final Semaphore userInteractionSemaphore = new Semaphore(0);
 
     public StreamingClient(String address, EventListener listener) {
         serverAddress = address;
@@ -154,25 +155,12 @@ public class StreamingClient extends Thread {
                                 if (!shaSent) {
                                     sendAuth(mSha);
                                     shaSent = true;
-                                } else {
-                                    SecretKeySpec secretKeySpec = new SecretKeySpec(mSha, CIPHER_ALGORITHM);
-                                    try {
-                                        IvParameterSpec paramSpec = new IvParameterSpec(CIPHER_IV.getBytes(Charset.forName(CIPHER_IV_CHARSET)));
-                                        Arrays.fill(mSha, (byte) 0);
-
-                                        Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
-                                        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);
-                                        cin = new CipherInputStream(in, cipher);
-
-                                        cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
-                                        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
-                                        cout = new BlockCipherOutputStream(out, cipher);
-                                    } catch (GeneralSecurityException e) {
-                                        eventListener.onError(AUTH_ERROR, (byte) AUTH_DENIED_SECURITY_ERROR, e);
-                                        return;
-                                    }
-                                    eventListener.onAuthorized();
+                                    break;
                                 }
+                                // else fall through
+                            case AUTH_OK_SKIP_SHA:
+                                setupCiphers();
+                                eventListener.onAuthorized();
                                 break;
                             default:
                                 eventListener.onError(AUTH_ERROR, (byte) result, null);
@@ -213,6 +201,8 @@ public class StreamingClient extends Thread {
                         //skip
                 }
             }
+        } catch (GeneralSecurityException e) {
+            eventListener.onError(AUTH_ERROR, (byte) AUTH_DENIED_SECURITY_ERROR, e);
         } catch (StreamCorruptedException e) {
             eventListener.onError(STREAMING_ERROR, null, e);
         } catch (EOFException e) {
@@ -222,6 +212,20 @@ public class StreamingClient extends Thread {
         } finally {
             terminateAndCleanup();
         }
+    }
+
+    private void setupCiphers() throws GeneralSecurityException {
+        SecretKeySpec secretKeySpec = new SecretKeySpec(mSha, CIPHER_ALGORITHM);
+        IvParameterSpec paramSpec = new IvParameterSpec(CIPHER_IV.getBytes(Charset.forName(CIPHER_IV_CHARSET)));
+        Arrays.fill(mSha, (byte) 0);
+
+        Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+        cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);
+        cin = new CipherInputStream(in, cipher);
+
+        cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+        cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
+        cout = new BlockCipherOutputStream(out, cipher);
     }
 
     private final boolean[] insecureConnectionDecisionContainer = new boolean[1];

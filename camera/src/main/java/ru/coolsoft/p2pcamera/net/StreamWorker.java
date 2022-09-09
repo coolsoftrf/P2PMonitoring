@@ -1,7 +1,9 @@
 package ru.coolsoft.p2pcamera.net;
 
+import static android.util.Base64.DEFAULT;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SERVER_ERROR;
 import static ru.coolsoft.common.Constants.AUTH_OK;
+import static ru.coolsoft.common.Constants.AUTH_OK_SKIP_SHA;
 import static ru.coolsoft.common.Constants.CIPHER_ALGORITHM;
 import static ru.coolsoft.common.Constants.CIPHER_IV;
 import static ru.coolsoft.common.Constants.CIPHER_IV_CHARSET;
@@ -19,6 +21,7 @@ import static ru.coolsoft.p2pcamera.net.StreamingServer.Situation.UNKNOWN_COMMAN
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.util.Base64;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -63,7 +66,7 @@ public class StreamWorker extends Thread {
         User,
         Denied,
         Shadow,
-        Verified
+        Allowed
     }
 
     private AuthStage authStage = AuthStage.User;
@@ -146,7 +149,14 @@ public class StreamWorker extends Thread {
     public void onAuthorizationFailed(@Constants.AuthFailureCause int cause) {
         authStage = AuthStage.Denied;
         sendData(null, AUTHENTICATION.id, cause);
-//        stopWorker(); //Connection should be closed by client once notification is received
+        //Connection should be closed by client once notification is received
+    }
+
+    public void onUserKnown(String shadow) {
+        sha = Base64.decode(shadow, DEFAULT);
+        if (setupCiphers() == null) {
+            sendData(null, AUTHENTICATION.id, AUTH_OK_SKIP_SHA);
+        }
     }
 
     public void onAuthorized() {
@@ -155,29 +165,37 @@ public class StreamWorker extends Thread {
                 authStage = AuthStage.Shadow;
                 break;
             case Shadow:
-                SecretKeySpec secretKeySpec = new SecretKeySpec(sha, CIPHER_ALGORITHM);
-                try {
-                    IvParameterSpec paramSpec = new IvParameterSpec(CIPHER_IV.getBytes(Charset.forName(CIPHER_IV_CHARSET)));
-                    Arrays.fill(sha, (byte) 0);
-
-                    Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
-                    cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
-                    cout = new BlockCipherOutputStream(out, cipher);
-
-                    cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
-                    cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);
-                    cin = new CipherInputStream(in, cipher);
-                } catch (GeneralSecurityException e) {
-                    onAuthorizationFailed(AUTH_DENIED_SERVER_ERROR);
+                if (setupCiphers() != null) {
                     return;
                 }
-                authStage = AuthStage.Verified;
                 break;
             default:
                 //unexpected state
                 return;
         }
         sendData(null, AUTHENTICATION.id, AUTH_OK);
+    }
+
+    private Exception setupCiphers() {
+        SecretKeySpec secretKeySpec = new SecretKeySpec(sha, CIPHER_ALGORITHM);
+        try {
+            IvParameterSpec paramSpec = new IvParameterSpec(CIPHER_IV.getBytes(Charset.forName(CIPHER_IV_CHARSET)));
+            Arrays.fill(sha, (byte) 0);
+
+            Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
+            cout = new BlockCipherOutputStream(out, cipher);
+
+            cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);
+            cin = new CipherInputStream(in, cipher);
+        } catch (GeneralSecurityException e) {
+            onAuthorizationFailed(AUTH_DENIED_SERVER_ERROR);
+            Log.e(LOG_TAG, "Cipher initialization failed", e);
+            return e;
+        }
+        authStage = AuthStage.Allowed;
+        return null;
     }
 
     private boolean sendData(byte[] data, int... args) {
@@ -222,10 +240,6 @@ public class StreamWorker extends Thread {
                             break;
                         case END_OF_STREAM:
                             break loop;
-/*
-                        case PADDING:
-                            //skip
-*/
                     }
                 }
             } catch (StreamCorruptedException e) {
@@ -239,15 +253,14 @@ public class StreamWorker extends Thread {
             }
         } catch (IOException e) {
             Log.e(LOG_TAG, "I/O stream creation failed", e);
-            e.printStackTrace();
         }
     }
 
     private boolean isNotReady() {
-        return authStage != AuthStage.Verified;
+        return authStage != AuthStage.Allowed;
     }
 
-    private boolean processAuth() throws StreamCorruptedException, EOFException {
+    private boolean processAuth() throws IOException {
         //ToDo: wait until listener reports its decision
         switch (authStage) {
             case User:
@@ -257,12 +270,9 @@ public class StreamWorker extends Thread {
                 sha = getAuthData();
                 listener.onShadow(this, sha);
                 return true;
-            case Verified:
-                //protocol violation
-            case Denied:
-                //no operations permitted
             default:
-                //whatever illegal
+                //Allowed - protocol violation
+                //Denied - no operations permitted
                 return false;
         }
     }

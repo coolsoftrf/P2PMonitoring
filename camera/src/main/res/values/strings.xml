@@ -11,7 +11,7 @@
 
     <!-- Authorization UI -->
     <string name="authorization_request">Do you want to grant \'%s\' access to this device cameras?</string>
-    <string name="allow_button">Allow</string>
+    <string name="allow_button">Allow once</string>
     <string name="allow_always_button">Allow always</string>
     <string name="deny_button">Deny</string>
     <string name="deny_always_button">Deny always</string>

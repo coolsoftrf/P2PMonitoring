@@ -209,13 +209,17 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onAuthorized() {
+            setAuthorized();
+            client.sendCommand(Command.CAPS, null);
+        }
+
+        private void setAuthorized() {
             runOnUiThread(() -> {
                 hideConnectionControls();
                 restoreConnectControls();
                 mAuthControls.setVisibility(View.GONE);
                 mCameraControls.setVisibility(View.VISIBLE);
             });
-            client.sendCommand(Command.CAPS, null);
         }
 
         @Override
@@ -320,7 +324,11 @@ public class MainActivity extends AppCompatActivity {
                         break;
                 }
             } else {
-                message = situation.toString() + ": " + e.getMessage();
+                String msg = situation.toString();
+                if (e.getMessage() != null) {
+                    msg += ": " + e.getMessage();
+                }
+                message = msg;
             }
             Log.w(LOG_TAG, message, e);
             runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show());

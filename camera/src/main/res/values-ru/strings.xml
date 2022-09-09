@@ -11,8 +11,8 @@
 
     <!-- Authorization UI -->
     <string name="authorization_request">Разрешить \'%s\' доступ к камерам этого устройства?</string>
-    <string name="allow_button">Разрешить</string>
-    <string name="allow_always_button">Всегда разрешать</string>
+    <string name="allow_button">Разрешить сейчас</string>
+    <string name="allow_always_button">Разрешать всегда</string>
     <string name="deny_button">Запретить</string>
     <string name="deny_always_button">Всегда запрещать</string>
 
