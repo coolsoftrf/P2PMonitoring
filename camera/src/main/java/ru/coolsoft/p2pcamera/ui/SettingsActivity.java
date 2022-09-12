@@ -3,16 +3,25 @@ package ru.coolsoft.p2pcamera.ui;
 import static ru.coolsoft.common.ui.KeyStorePickerUtils.launchKeyStorePickerForResult;
 import static ru.coolsoft.common.ui.KeyStorePickerUtils.registerKeyStorePickerForResult;
 
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.DialogInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.MenuItem;
+import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.fragment.app.FragmentResultListener;
+import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
@@ -23,21 +32,30 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 import ru.coolsoft.common.Constants;
 import ru.coolsoft.common.ui.ConfirmationDialogFragment;
 import ru.coolsoft.p2pcamera.R;
+import ru.coolsoft.p2pcamera.SettingsManager;
 
 public class SettingsActivity extends AppCompatActivity {
+    private boolean serverRestartRequired;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.settings_activity);
+
+        FragmentManager fm = getSupportFragmentManager();
+        fm.setFragmentResultListener(SettingsFragment.REQUEST_RESTART, this, (requestKey, result) ->
+                serverRestartRequired = true
+        );
+
         if (savedInstanceState == null) {
-            getSupportFragmentManager()
-                    .beginTransaction()
+            fm.beginTransaction()
                     .replace(R.id.settings, new SettingsFragment())
                     .commit();
         }
@@ -55,8 +73,25 @@ public class SettingsActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    public void onBackPressed() {
+        if (serverRestartRequired) {
+            new RestartAlertDialogFragment().show(getSupportFragmentManager(), null);
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    private void onSuperBackPressed(DialogInterface dialog, int which) {
+        super.onBackPressed();
+    }
+
     public static class SettingsFragment extends PreferenceFragmentCompat {
+        public static final String REQUEST_RESTART = "restart";
+
         private static final String LOG_TAG = SettingsFragment.class.getSimpleName();
+        private static final String CONFIRM_KEY_REMOVAL = "key";
+        private static final String CONFIRM_USER_REMOVAL = "user";
 
         private boolean keyImported = false;
         private KeyStore inputKeyStore;
@@ -85,8 +120,8 @@ public class SettingsActivity extends AppCompatActivity {
                             null,
                             inputKeyStore.getCertificateChain(Constants.ALIAS_MONITORING));
                     keyImported = true;
+                    setRestartRequired();
                     updatePrivateKeyPreference(KeyLoadingResult.OK);
-                    //ToDo: ask user to restart the server («all clients will be disconnected»)
                 } catch (KeyStoreException e) {
                     updatePrivateKeyPreference(KeyLoadingResult.ErrorSavingKey);
                     Log.w(LOG_TAG, e);
@@ -100,24 +135,34 @@ public class SettingsActivity extends AppCompatActivity {
             }
         };
 
-        private final FragmentResultListener privateKeyRemovalConfirmation = (requestKey, result) -> {
-            if (!(requestKey.equals(ConfirmationDialogFragment.DIALOG_CONFIRMATION)
-                    && result.getBoolean(Boolean.class.getSimpleName()))) {
+        private final FragmentResultListener removalConfirmation = (requestKey, result) -> {
+            if (!result.getBoolean(Boolean.class.getSimpleName())) {
                 return;
             }
-
-            try {
-                KeyStore ksAndroid = KeyStore.getInstance(Constants.ANDROID_KEY_STORE);
-                ksAndroid.load(null);
-                ksAndroid.deleteEntry(Constants.ALIAS_MONITORING);
-                keyImported = false;
-                updatePrivateKeyPreference(KeyLoadingResult.OK);
-                //ToDo: ask user to restart the server («all clients will be disconnected»)
-            } catch (KeyStoreException | CertificateException | IOException | NoSuchAlgorithmException e) {
-                Log.w(LOG_TAG, e);
-                updatePrivateKeyPreference(KeyLoadingResult.ErrorRemovingKey);
+            switch (requestKey) {
+                case CONFIRM_KEY_REMOVAL:
+                    try {
+                        KeyStore ksAndroid = KeyStore.getInstance(Constants.ANDROID_KEY_STORE);
+                        ksAndroid.load(null);
+                        ksAndroid.deleteEntry(Constants.ALIAS_MONITORING);
+                        keyImported = false;
+                        updatePrivateKeyPreference(KeyLoadingResult.OK);
+                        setRestartRequired();
+                    } catch (KeyStoreException | CertificateException | IOException | NoSuchAlgorithmException e) {
+                        Log.w(LOG_TAG, e);
+                        updatePrivateKeyPreference(KeyLoadingResult.ErrorRemovingKey);
+                    }
+                    break;
+                case CONFIRM_USER_REMOVAL:
+                    SettingsManager.getInstance(requireContext()).removeUser(result.getString(String.class.getSimpleName()));
+                    refreshUserListPreferences();
+                    break;
             }
         };
+
+        private void setRestartRequired() {
+            getParentFragmentManager().setFragmentResult(REQUEST_RESTART, Bundle.EMPTY);
+        }
 
         private final ActivityResultLauncher<String> mPrivateKeyPicker = registerKeyStorePickerForResult(this,
                 uri -> {
@@ -179,7 +224,8 @@ public class SettingsActivity extends AppCompatActivity {
             }
 
             getParentFragmentManager().setFragmentResultListener(PasswordInputDialogFragment.RESULT_TAG, this, privateKeyPasswordListener);
-            getParentFragmentManager().setFragmentResultListener(ConfirmationDialogFragment.DIALOG_CONFIRMATION, this, privateKeyRemovalConfirmation);
+            getParentFragmentManager().setFragmentResultListener(CONFIRM_KEY_REMOVAL, this, removalConfirmation);
+            getParentFragmentManager().setFragmentResultListener(CONFIRM_USER_REMOVAL, this, removalConfirmation);
 
             try {
                 KeyStore ksAndroid = KeyStore.getInstance(Constants.ANDROID_KEY_STORE);
@@ -190,17 +236,72 @@ public class SettingsActivity extends AppCompatActivity {
             }
 
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
+
+            Preference portPreference = Objects.requireNonNull(findPreference(getString(R.string.pref_key_port)));
+            portPreference.setSummaryProvider(this::getPortPreferenceSummary);
+            portPreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                try {
+                    int val = Integer.parseInt((String) newValue);
+                    if (val > 0 && val < 65536) {
+                        setRestartRequired();
+                        return true;
+                    }
+                } catch (NumberFormatException e) {
+                    Log.i(LOG_TAG, "user entered non-numeric port", e);
+                }
+                Toast.makeText(requireContext(), R.string.port_error, Toast.LENGTH_LONG).show();
+                return false;
+            });
+
             privateKeyPreference = Objects.requireNonNull(findPreference(getString(R.string.pref_key_private_key)));
             privateKeyPreference.setOnPreferenceClickListener(preference -> {
                 if (keyImported) {
-                    new ConfirmationDialogFragment(R.string.title_private_key_removal_request, R.string.message_private_key_removal_request)
-                            .show(getParentFragmentManager(), null);
+                    new ConfirmationDialogFragment(
+                            R.string.title_private_key_removal_request,
+                            R.string.message_private_key_removal_request,
+                            CONFIRM_KEY_REMOVAL
+                    ).show(getParentFragmentManager(), null);
                 } else {
                     launchKeyStorePickerForResult(mPrivateKeyPicker);
                 }
                 return true;
             });
             updatePrivateKeyPreference(KeyLoadingResult.OK);
+
+            refreshUserListPreferences();
+        }
+
+        private void refreshUserListPreferences() {
+            @StringRes final int[] userLists = new int[]{R.string.pref_key_black_list, R.string.pref_key_white_list};
+            final List<List<String>> accessLists = List.of(new ArrayList<>(), new ArrayList<>());
+            SettingsManager.getInstance(requireContext()).getUserAccessList(accessLists.get(0), accessLists.get(1));
+            for (int i = 0; i < userLists.length; i++) {
+                ListPreference userListPreference = Objects.requireNonNull(findPreference(getString(userLists[i])));
+                userListPreference.setEntries(accessLists.get(i).toArray(new String[0]));
+                userListPreference.setEntryValues(accessLists.get(i).toArray(new String[0]));
+
+                userListPreference.setOnPreferenceChangeListener(this::confirmUserRemoval);
+            }
+        }
+
+        private boolean confirmUserRemoval(Preference preference, Object user) {
+            ConfirmationDialogFragment confirmation = new ConfirmationDialogFragment(
+                    R.string.title_remove_from_list_confirmation,
+                    R.string.message_remove_from_list_confirmation,
+                    CONFIRM_USER_REMOVAL);
+            confirmation.requireArguments().putString(String.class.getSimpleName(), (String) user);
+            confirmation.show(getParentFragmentManager(), null);
+            return false;
+        }
+
+        private <T extends Preference> CharSequence getPortPreferenceSummary(T preference) {
+            SettingsManager sm = SettingsManager.getInstance(requireContext());
+            String port = String.valueOf(sm.getPort());
+            if (sm.isPortDefault()) {
+                port += getString(R.string.port_default);
+            }
+
+            return port;
         }
 
         @Override
@@ -217,6 +318,18 @@ public class SettingsActivity extends AppCompatActivity {
             UnexpectedError,
             ErrorSavingKey,
             ErrorRemovingKey
+        }
+    }
+
+    public static class RestartAlertDialogFragment extends DialogFragment {
+        @NonNull
+        @Override
+        public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+            return new AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.title_restart_required)
+                    .setMessage(R.string.message_restart_required)
+                    .setPositiveButton(android.R.string.ok, ((SettingsActivity) requireActivity())::onSuperBackPressed)
+                    .create();
         }
     }
 }

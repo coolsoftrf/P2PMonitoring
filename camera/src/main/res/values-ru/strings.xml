@@ -16,15 +16,25 @@
     <string name="deny_button">Запретить</string>
     <string name="deny_always_button">Всегда запрещать</string>
 
-    <!-- Preference Titles -->
+    <!-- Preferences -->
     <string name="title_activity_settings">Настройки приложения</string>
+
+    <!-- Network Preferences Section -->
+    <string name="network_header">Сеть</string>
+
+    <!-- Network: Private Key Preference -->
+    <string name="port">Порт</string>
+    <string name="port_default">(стандартный)</string>
+    <string name="port_error">Неверный порт. Ожидается целое 1..65535</string>
+
+    <!-- Security Preferences Section -->
     <string name="security_header">Безопасность</string>
 
-    <!-- Sync Preferences -->
+    <!-- Security: Private Key Preference -->
     <string name="private_key">Закрытый ключ</string>
     <string name="title_private_key_password_request">Введите пароль от выбранного файла хранилища</string>
     <string name="hint_private_key_password">Пароль</string>
-    <string name="title_private_key_removal_request">Вы действительнохотите хотите удалить ключ?</string>
+    <string name="title_private_key_removal_request">Вы действительно хотите хотите удалить ключ?</string>
     <string name="message_private_key_removal_request">Эта операция необратима. Чтобы вернуть шифрование потребуется заново загрузить файл ключа</string>
     <string name="private_key_summary_imported">Закрытый ключ установлен. Нажмите чтобы удалить.</string>
     <string name="private_key_summary_click_to_load">Нажмите чтобы загрузить файл закрытого ключа</string>
@@ -34,4 +44,20 @@
     <string name="private_key_summary_password">Ошибка загрузки ключа. Возможно, пароль неверен</string>
     <string name="private_key_summary_storing">Ошибка установки ключа</string>
     <string name="private_key_summary_removing">Ошибка удаления ключа</string>
+
+    <!-- User Management Preferences Section -->
+    <string name="user_management_header">Пользователи</string>
+
+    <!-- User Management: White list -->
+    <string name="white_list">Всегда разрешать</string>
+
+    <!-- User Management: Black list -->
+    <string name="black_list">Всегда запрещать</string>
+
+    <string name="message_remove_from_list">Выберите пользователя чтобы удалить его из списка</string>
+    <string name="title_remove_from_list_confirmation">Действительно удалить пользователя?</string>
+    <string name="message_remove_from_list_confirmation">При следующей попытке входа этого пользователя разрешение будет запрошено вновь</string>
+
+    <string name="title_restart_required">Необходимо перезапустить приложение</string>
+    <string name="message_restart_required">Были изменены настройки, влияющие на уже запущенные сервисы. Чтобы изменения вступили в силу необходимо перезапустить приложение</string>
 </resources>

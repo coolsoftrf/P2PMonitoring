@@ -1,10 +1,36 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory app:title="@string/network_header">
+
+        <EditTextPreference
+            app:key="@string/pref_key_port"
+            app:title="@string/port" />
+
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/security_header">
 
         <Preference
             app:key="@string/pref_key_private_key"
-            app:title="@string/private_key"/>
+            app:title="@string/private_key" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/user_management_header">
+
+        <ListPreference
+            app:key="@string/pref_key_black_list"
+            app:persistent="false"
+            app:summary="@string/message_remove_from_list"
+            app:title="@string/black_list" />
+
+        <ListPreference
+            app:key="@string/pref_key_white_list"
+            app:persistent="false"
+            app:summary="@string/message_remove_from_list"
+            app:title="@string/white_list">
+
+        </ListPreference>
 
     </PreferenceCategory>
 

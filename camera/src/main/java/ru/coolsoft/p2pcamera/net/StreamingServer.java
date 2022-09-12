@@ -1,7 +1,6 @@
 package ru.coolsoft.p2pcamera.net;
 
 import static ru.coolsoft.common.Constants.SSL_PROTOCOL;
-import static ru.coolsoft.common.Defaults.SERVER_PORT;
 import static ru.coolsoft.p2pcamera.net.PortMappingServer.PortMappingProtocol.TCP;
 
 import android.util.Log;
@@ -43,6 +42,8 @@ public class StreamingServer extends Thread {
 
     private boolean running = false;
     private ServerSocket serverSocket;
+
+    private final short serverPort;
     private final ArrayList<StreamWorker> streams = new ArrayList<>();
     private final EventListener serverListener;
     private final PortMappingServer mappingServer;
@@ -72,15 +73,16 @@ public class StreamingServer extends Thread {
         }
     };
 
-    public StreamingServer(EventListener eventListener) {
+    public StreamingServer(short port, EventListener eventListener) {
         super(StreamingServer.class.getSimpleName());
+        serverPort = port;
         serverListener = eventListener;
 
         mappingServer = new PortMappingServer(new PortMappingServer.PortMappingListener() {
             @Override
             public void onGatewaysDiscovered(Map<InetAddress, GatewayDevice> gateways) {
                 serverListener.onGatewaysDiscovered(gateways);
-                mappingServer.mapPort(SERVER_PORT, TCP, "Primary P2P Camera");
+                mappingServer.mapPort(serverPort, TCP, "Primary P2P Camera");
             }
 
             @Override
@@ -111,13 +113,12 @@ public class StreamingServer extends Thread {
                 serverSocket.close();
                 serverSocket = null;
             }
-            mappingServer.removeMapping(SERVER_PORT, TCP);
+            mappingServer.removeMapping(serverPort, TCP);
             mappingServer.stopServer();
         } catch (IOException e) {
             e.printStackTrace();
         }
         for (StreamWorker worker : streams) {
-            //FixMe: ConcurrentModificationException
             worker.stopWorker();
         }
     }
@@ -177,12 +178,12 @@ public class StreamingServer extends Thread {
         }
 
         if (!keyImported || ctx == null) {
-            return new ServerSocket(SERVER_PORT);
+            return new ServerSocket(serverPort);
         }
 
         SSLServerSocketFactory socketFactory = ctx.getServerSocketFactory();
         Log.i(LOG_TAG, "Starting an SSL socket server");
-        return socketFactory.createServerSocket(SERVER_PORT);
+        return socketFactory.createServerSocket(serverPort);
     }
 
     private SSLContext getSecureContext(KeyStore ks) {

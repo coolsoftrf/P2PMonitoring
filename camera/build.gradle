@@ -11,7 +11,7 @@ android {
         minSdkVersion 22
         targetSdkVersion 32
         versionCode 3
-        versionName "0.2.1"
+        versionName "0.3.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,7 +34,7 @@ android {
 dependencies {
     implementation project(':common')
 
-    implementation 'androidx.appcompat:appcompat:1.5.0'
+    implementation 'androidx.appcompat:appcompat:1.5.1'
     implementation 'com.google.android.material:material:1.6.1'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'org.bitlet:weupnp:0.1.4'

@@ -79,7 +79,7 @@ import ru.coolsoft.common.enums.Command;
 import ru.coolsoft.common.enums.Flashlight;
 import ru.coolsoft.p2pcamera.CameraService;
 import ru.coolsoft.p2pcamera.R;
-import ru.coolsoft.p2pcamera.SecurityManager;
+import ru.coolsoft.p2pcamera.SettingsManager;
 import ru.coolsoft.p2pcamera.databinding.ActivityMainBinding;
 import ru.coolsoft.p2pcamera.net.PortMappingServer;
 import ru.coolsoft.p2pcamera.net.StreamWorker;
@@ -222,16 +222,16 @@ public class MainActivity extends AppCompatActivity {
         }
         StreamWorker worker = clients.get(clientIndex).streamWorker;
 
-        SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
+        SettingsManager sm = SettingsManager.getInstance(MainActivity.this);
         switch (decision) {
             case ALLOW_ALWAYS:
-                sm.setUserAccess(user, SecurityManager.UserAccess.GRANTED);
+                sm.setUserAccess(user, SettingsManager.UserAccess.GRANTED);
                 //fall through
             case ALLOW:
                 worker.onAuthorized();
                 break;
             case DENY_ALWAYS:
-                sm.setUserAccess(user, SecurityManager.UserAccess.DENIED);
+                sm.setUserAccess(user, SettingsManager.UserAccess.DENIED);
             case DENY:
                 worker.onAuthorizationFailed(AUTH_DENIED_NOT_ALLOWED);
                 break;
@@ -498,7 +498,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupServer() {
-        streamingServer = new StreamingServer(eventListener);
+        SettingsManager sm = SettingsManager.getInstance(MainActivity.this);
+        streamingServer = new StreamingServer(Short.parseShort(sm.getPort()), eventListener);
         streamingServer.start();
 
         ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -572,7 +573,7 @@ public class MainActivity extends AppCompatActivity {
             }
             clients.get(clientIndex).setUserName(user);
 
-            SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
+            SettingsManager sm = SettingsManager.getInstance(MainActivity.this);
             switch (sm.getUserAccess(user)) {
                 case GRANTED:
                     String sha = sm.getUserShadow(user);
@@ -589,6 +590,7 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 default:
                     Socket socket = worker.getSocket();
+                    //ToDo: in case the activity is offline - postpone the dialog creation till the activity is available
                     new AuthorizationDialogFragment(user, new InetSocketAddress(socket.getInetAddress(), socket.getPort()))
                             .show(getSupportFragmentManager(), AuthorizationDialogFragment.TAG_PREFIX + user);
             }
@@ -605,7 +607,7 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            SecurityManager sm = SecurityManager.getInstance(MainActivity.this);
+            SettingsManager sm = SettingsManager.getInstance(MainActivity.this);
             String user = clients.get(clientIndex).getUserName();
             String shadowPref = sm.getUserShadow(user);
             String shaStr = Base64.encodeToString(shadow, DEFAULT);

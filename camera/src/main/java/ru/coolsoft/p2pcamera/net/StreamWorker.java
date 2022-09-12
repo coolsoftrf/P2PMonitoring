@@ -261,7 +261,6 @@ public class StreamWorker extends Thread {
     }
 
     private boolean processAuth() throws IOException {
-        //ToDo: wait until listener reports its decision
         switch (authStage) {
             case User:
                 listener.onUser(this, new String(getAuthData(), StandardCharsets.UTF_8));

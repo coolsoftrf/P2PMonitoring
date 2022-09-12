@@ -16,11 +16,23 @@
     <string name="deny_button">Deny</string>
     <string name="deny_always_button">Deny always</string>
 
-    <!-- Preference Titles -->
+    <!-- Preferences -->
     <string name="title_activity_settings">Application Settings</string>
+
+    <!-- Network Preferences Section -->
+    <string name="network_header">Network</string>
+
+    <!-- Network: Private Key Preference -->
+    <string name="pref_key_port" translatable="false">port</string>
+    <string name="port">Port number</string>
+    <string name="port_default">(default)</string>
+    <string name="port_error">Invalid port number. Should be an integer 1..65535</string>
+
+    <!-- Security Preferences Section -->
     <string name="security_header">Security</string>
 
-    <!-- Sync Preferences -->
+    <!-- Security: Private Key Preference -->
+    <string name="pref_key_private_key" translatable="false">private_key</string>
     <string name="private_key">Private key</string>
     <string name="title_private_key_password_request">Enter keystore password</string>
     <string name="hint_private_key_password">Password</string>
@@ -35,6 +47,21 @@
     <string name="private_key_summary_storing">Error installing private key</string>
     <string name="private_key_summary_removing">Private key entry cannot be removed</string>
 
-    <!-- Preference Keys -->
-    <string name="pref_key_private_key" translatable="false">private_key</string>
+    <!-- User Management Preferences Section -->
+    <string name="user_management_header">User management</string>
+
+    <!-- User Management White list -->
+    <string name="pref_key_white_list" translatable="false">white_list</string>
+    <string name="white_list">White list</string>
+
+    <!-- User Management Black list -->
+    <string name="pref_key_black_list" translatable="false">black_list</string>
+    <string name="black_list">Black list</string>
+
+    <string name="message_remove_from_list">Choose a user to remove from the list</string>
+    <string name="title_remove_from_list_confirmation">Delete the selected user?</string>
+    <string name="message_remove_from_list_confirmation">Grants will be asked next time the user attempts to gain access to the service</string>
+
+    <string name="title_restart_required">App restart required</string>
+    <string name="message_restart_required">You\'ve just changed preferences critical to currently running services. Please restart the app for these changes to take effect</string>
 </resources>

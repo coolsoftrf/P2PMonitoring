@@ -24,9 +24,6 @@ public class AuthorizationDialogFragment extends DialogFragment {
     public static final String ADDRESS_KEY = "address";
     public static final String RESULT_KEY = "decision";
 
-    private String userName;
-    private InetSocketAddress address;
-
     private final DialogInterface.OnClickListener onButtonClickListener = (dialog, which) -> {
         Decision decision;
         switch (which) {
@@ -46,19 +43,17 @@ public class AuthorizationDialogFragment extends DialogFragment {
     };
 
     public AuthorizationDialogFragment(String user, InetSocketAddress clientAddress) {
-        userName = user;
-        address = clientAddress;
+        Bundle args = new Bundle(2);
+        args.putString(USER_KEY, user);
+        args.putSerializable(ADDRESS_KEY, clientAddress);
+        setArguments(args);
     }
 
     @NonNull
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        if (savedInstanceState != null) {
-            userName = savedInstanceState.getString(USER_KEY);
-            address = savedInstanceState.getParcelable(ADDRESS_KEY);
-        }
         return new AlertDialog.Builder(requireContext())
-                .setMessage(getString(R.string.authorization_request, userName))
+                .setMessage(getString(R.string.authorization_request, requireArguments().getString(USER_KEY)))
                 .setPositiveButton(R.string.allow_always_button, onButtonClickListener)
                 .setNeutralButton(R.string.allow_button, onButtonClickListener)
                 .setNegativeButton(R.string.deny_always_button, onButtonClickListener)
@@ -70,17 +65,8 @@ public class AuthorizationDialogFragment extends DialogFragment {
         handleDecision(Decision.DENY);
     }
 
-    @Override
-    public void onSaveInstanceState(@NonNull Bundle outState) {
-        outState.putString(USER_KEY, userName);
-        outState.putSerializable(ADDRESS_KEY, address);
-        super.onSaveInstanceState(outState);
-    }
-
     private void handleDecision(Decision decision) {
-        Bundle result = new Bundle(1);
-        result.putString(USER_KEY, userName);
-        result.putSerializable(ADDRESS_KEY, address);
+        Bundle result = requireArguments();
         result.putSerializable(RESULT_KEY, decision);
         getParentFragmentManager().setFragmentResult(RESULT_TAG, result);
 

@@ -11,6 +11,7 @@ import static ru.coolsoft.common.Constants.CIPHER_IV_CHARSET;
 import static ru.coolsoft.common.Constants.CIPHER_TRANSFORMATION;
 import static ru.coolsoft.common.Constants.SSL_PROTOCOL;
 import static ru.coolsoft.common.Constants.UNUSED;
+import static ru.coolsoft.common.Defaults.SERVER_PORT;
 import static ru.coolsoft.common.Protocol.END_OF_STREAM;
 import static ru.coolsoft.common.Protocol.createSendRoutine;
 import static ru.coolsoft.common.enums.StreamId.AUTHENTICATION;
@@ -19,6 +20,7 @@ import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.AUTH_ER
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.CONNECTION_CLOSED;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.ERROR_CLOSING;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.HOST_UNRESOLVED_ERROR;
+import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.ILLEGAL_HOST_DETAILS_ERROR;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.SOCKET_INITIALIZATION_ERROR;
 import static ru.coolsoft.p2pmonitor.StreamingClient.EventListener.Error.STREAMING_ERROR;
 
@@ -66,7 +68,6 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import ru.coolsoft.common.BlockCipherOutputStream;
-import ru.coolsoft.common.Defaults;
 import ru.coolsoft.common.Protocol;
 import ru.coolsoft.common.enums.Command;
 import ru.coolsoft.common.enums.StreamId;
@@ -122,11 +123,23 @@ public class StreamingClient extends Thread {
 
     @Override
     public void run() {
-        InetAddress address;
+        InetSocketAddress address;
         try {
-            address = InetAddress.getByName(serverAddress);
+            String[] parts = serverAddress.split("/");
+            InetAddress host = InetAddress.getByName(parts[0]);
+            int port;
+            if (parts.length > 1) {
+                port = Short.parseShort(parts[1]);
+            } else {
+                port = SERVER_PORT;
+            }
+            address = new InetSocketAddress(host, port);
         } catch (UnknownHostException e) {
             eventListener.onError(HOST_UNRESOLVED_ERROR, null, e);
+            terminateAndCleanup();
+            return;
+        } catch (NumberFormatException e) {
+            eventListener.onError(ILLEGAL_HOST_DETAILS_ERROR, null, e);
             terminateAndCleanup();
             return;
         }
@@ -230,7 +243,7 @@ public class StreamingClient extends Thread {
 
     private final boolean[] insecureConnectionDecisionContainer = new boolean[1];
 
-    private void createSocket(InetAddress address) throws IOException {
+    private void createSocket(InetSocketAddress address) throws IOException {
         SSLSocket secureSocket = createSecureSocket(address);
         if (secureSocket != null) {
             try {
@@ -238,6 +251,7 @@ public class StreamingClient extends Thread {
                 socket = secureSocket;
                 return;
             } catch (IOException e) {
+                //ToDo: handle certificate mismatch case not to fall back to insecure socket, but report a security violation
                 //Possible reasons:
                 // javax.net.ssl.SSLHandshakeException: java.security.cert.CertPathValidatorException: Trust anchor for certification path not found.
                 //  Caused by: java.security.cert.CertificateException: java.security.cert.CertPathValidatorException: Trust anchor for certification path not found.
@@ -254,7 +268,7 @@ public class StreamingClient extends Thread {
         }
 
         socket = new Socket();
-        socket.connect(new InetSocketAddress(address, Defaults.SERVER_PORT));
+        socket.connect(address);
     }
 
     private final SSLContext[] secureContextContainer = new SSLContext[1];
@@ -271,7 +285,7 @@ public class StreamingClient extends Thread {
         userInteractionSemaphore.release();
     };
 
-    private SSLSocket createSecureSocket(InetAddress address) throws IOException {
+    private SSLSocket createSecureSocket(InetSocketAddress address) throws IOException {
         try {
             secureContextContainer[0] = SSLContext.getInstance(SSL_PROTOCOL);
             provideTrustManager(trustManagerConsumer);
@@ -289,8 +303,7 @@ public class StreamingClient extends Thread {
         }
 
         SSLSocketFactory SocketFactory = secureContextContainer[0].getSocketFactory();
-        //ToDo: handle certificate mismatch case not to fall back to insecure socket, but report a security violation
-        return (SSLSocket) SocketFactory.createSocket(address, Defaults.SERVER_PORT);
+        return (SSLSocket) SocketFactory.createSocket(address.getAddress(), address.getPort());
     }
 
     private void provideTrustManager(Consumer<TrustManager[]> resultConsumer) throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
@@ -419,6 +432,7 @@ public class StreamingClient extends Thread {
     public interface EventListener {
         enum Error {
             HOST_UNRESOLVED_ERROR,
+            ILLEGAL_HOST_DETAILS_ERROR,
             SOCKET_INITIALIZATION_ERROR,
             AUTH_ERROR,
             STREAMING_ERROR,

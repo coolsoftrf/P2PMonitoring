@@ -33,10 +33,10 @@ public class ConfirmationDialogFragment extends DialogFragment {
     }
 
     private void setResult(Boolean resultValue) {
-        Bundle bundle = new Bundle();
+        Bundle bundle = requireArguments();
         bundle.putBoolean(Boolean.class.getSimpleName(), resultValue);
 
-        String key = requireArguments().getString(KEY);
+        String key = bundle.getString(KEY);
         if (key == null) {
             key = DIALOG_CONFIRMATION;
         }

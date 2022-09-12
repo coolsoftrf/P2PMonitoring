@@ -45,8 +45,8 @@ which supports Enum annotations used in this project)
 ## Phase #2 - «Security»
 - [x] Authentication and Authorization
 - [x] Payload ciphering
-- [ ] Secure transport layer
-- [ ] Server: UI controls for user management
+- [x] Secure transport layer
+- [x] Server: user management preferences
 ## Phase #3 - «Camera controls»
 - [ ] Server: collect map of cameras to their characteristics
 - [ ] Server: screen dimming with configurable timeout
@@ -58,7 +58,7 @@ which supports Enum annotations used in this project)
 - [ ] Client: action icons
 - [ ] Client & Server: rotate UI controls instead of screen orientation
 - [ ] Client: server address & login history
-- [ ] Server: client statistics (address, connection time, etc.)
+- [ ] Server: client statistics (address, connection duration, etc.)
 ## Phase #5 - «Media store»
 - [ ] PC client app
 - [ ] monitoring data saving 
