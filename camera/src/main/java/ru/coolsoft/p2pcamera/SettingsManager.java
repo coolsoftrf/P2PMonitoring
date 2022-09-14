@@ -1,7 +1,6 @@
 package ru.coolsoft.p2pcamera;
 
 import static ru.coolsoft.common.Defaults.SERVER_PORT;
-import static ru.coolsoft.p2pcamera.SettingsManager.UserAccess.GRANTED;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -52,12 +51,23 @@ public class SettingsManager {
         );
     }
 
-    public void getUserAccessList(Collection<String> blackList, Collection<String> whiteList) {
-        int splitStart = USER_ACCESS_PREFIX.length() + USER_PREFIX_DELIMITER.length();
+    public void getUserAccessList(Collection<String> blackList, Collection<String> whiteList, Collection<String> others) {
+        int splitStart = USER_SHADOW_PREFIX.length() + USER_PREFIX_DELIMITER.length();
         for (Map.Entry<String, ?> entry : preferences.getAll().entrySet()) {
-            if (entry.getKey().startsWith(USER_ACCESS_PREFIX)) {
+            if (entry.getKey().startsWith(USER_SHADOW_PREFIX)) {
                 String user = entry.getKey().substring(splitStart);
-                (GRANTED.toString().equals(entry.getValue()) ? whiteList : blackList).add(user);
+                Collection<String> list;
+                switch (getUserAccess(user)) {
+                    case GRANTED:
+                        list = whiteList;
+                        break;
+                    case DENIED:
+                        list = blackList;
+                        break;
+                    default:
+                        list = others;
+                }
+                list.add(user);
             }
         }
     }

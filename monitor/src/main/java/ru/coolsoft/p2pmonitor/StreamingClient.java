@@ -3,6 +3,7 @@ package ru.coolsoft.p2pmonitor;
 import static ru.coolsoft.common.Constants.ALIAS_MONITORING;
 import static ru.coolsoft.common.Constants.ANDROID_KEY_STORE;
 import static ru.coolsoft.common.Constants.AUTH_DENIED_SECURITY_ERROR;
+import static ru.coolsoft.common.Constants.AUTH_DENIED_WRONG_CREDENTIALS;
 import static ru.coolsoft.common.Constants.AUTH_OK;
 import static ru.coolsoft.common.Constants.AUTH_OK_SKIP_SHA;
 import static ru.coolsoft.common.Constants.CIPHER_ALGORITHM;
@@ -40,6 +41,7 @@ import java.io.OutputStream;
 import java.io.StreamCorruptedException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ProtocolException;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.charset.Charset;
@@ -52,6 +54,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Semaphore;
@@ -207,7 +210,8 @@ public class StreamingClient extends Thread {
                         break;
                     }
                     default:
-                        Log.e(LOG_TAG, String.format("Unexpected stream ID: %d", streamId));
+                        eventListener.onError(AUTH_ERROR, (byte) AUTH_DENIED_WRONG_CREDENTIALS,
+                                new ProtocolException(MessageFormat.format("Unexpected stream ID: {0}", streamId)));
                     case END_OF_STREAM:
                         break loop;
                     case PADDING:

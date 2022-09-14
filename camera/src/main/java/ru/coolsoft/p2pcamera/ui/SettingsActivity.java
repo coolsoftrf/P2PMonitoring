@@ -272,9 +272,9 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         private void refreshUserListPreferences() {
-            @StringRes final int[] userLists = new int[]{R.string.pref_key_black_list, R.string.pref_key_white_list};
-            final List<List<String>> accessLists = List.of(new ArrayList<>(), new ArrayList<>());
-            SettingsManager.getInstance(requireContext()).getUserAccessList(accessLists.get(0), accessLists.get(1));
+            @StringRes final int[] userLists = new int[]{R.string.pref_key_black_list, R.string.pref_key_white_list, R.string.pref_key_onetimers};
+            final List<List<String>> accessLists = List.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+            SettingsManager.getInstance(requireContext()).getUserAccessList(accessLists.get(0), accessLists.get(1), accessLists.get(2));
             for (int i = 0; i < userLists.length; i++) {
                 ListPreference userListPreference = Objects.requireNonNull(findPreference(getString(userLists[i])));
                 userListPreference.setEntries(accessLists.get(i).toArray(new String[0]));

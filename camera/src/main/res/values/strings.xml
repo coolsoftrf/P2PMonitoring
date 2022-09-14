@@ -58,6 +58,10 @@
     <string name="pref_key_black_list" translatable="false">black_list</string>
     <string name="black_list">Black list</string>
 
+    <!-- User Management One-time authorizations -->
+    <string name="pref_key_onetimers" translatable="false">onetimers</string>
+    <string name="onetimers">Others</string>
+
     <string name="message_remove_from_list">Choose a user to remove from the list</string>
     <string name="title_remove_from_list_confirmation">Delete the selected user?</string>
     <string name="message_remove_from_list_confirmation">Grants will be asked next time the user attempts to gain access to the service</string>

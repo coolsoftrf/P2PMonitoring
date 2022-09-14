@@ -54,6 +54,9 @@
     <!-- User Management: Black list -->
     <string name="black_list">Всегда запрещать</string>
 
+    <!-- User Management One-time authorizations -->
+    <string name="onetimers">Всегда спрашивать</string>
+
     <string name="message_remove_from_list">Выберите пользователя чтобы удалить его из списка</string>
     <string name="title_remove_from_list_confirmation">Действительно удалить пользователя?</string>
     <string name="message_remove_from_list_confirmation">При следующей попытке входа этого пользователя разрешение будет запрошено вновь</string>

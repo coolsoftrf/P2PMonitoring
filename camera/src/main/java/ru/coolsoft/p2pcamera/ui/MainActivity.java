@@ -228,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
                 sm.setUserAccess(user, SettingsManager.UserAccess.GRANTED);
                 //fall through
             case ALLOW:
-                worker.onAuthorized();
+                reportAuthorizationGranted(worker, user, sm);
                 break;
             case DENY_ALWAYS:
                 sm.setUserAccess(user, SettingsManager.UserAccess.DENIED);
@@ -576,14 +576,7 @@ public class MainActivity extends AppCompatActivity {
             SettingsManager sm = SettingsManager.getInstance(MainActivity.this);
             switch (sm.getUserAccess(user)) {
                 case GRANTED:
-                    String sha = sm.getUserShadow(user);
-                    if (sha != null) {
-                        worker.onUserKnown(sha);
-                        reportCodecFormat(worker);
-                    } else {
-                        //hypothetical case when initial authorization is granted, but shadow was not yet saved
-                        worker.onAuthorized();
-                    }
+                    reportAuthorizationGranted(worker, user, sm);
                     break;
                 case DENIED:
                     worker.onAuthorizationFailed(AUTH_DENIED_NOT_ALLOWED);
@@ -591,6 +584,7 @@ public class MainActivity extends AppCompatActivity {
                 default:
                     Socket socket = worker.getSocket();
                     //ToDo: in case the activity is offline - postpone the dialog creation till the activity is available
+                    //ToDo: adjust protocol not to show the dialog for one-timers whose shadow doesn't match
                     new AuthorizationDialogFragment(user, new InetSocketAddress(socket.getInetAddress(), socket.getPort()))
                             .show(getSupportFragmentManager(), AuthorizationDialogFragment.TAG_PREFIX + user);
             }
@@ -615,20 +609,10 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(LOG_TAG, String.format("Shadow initialized for user '%s':%s", user, shaStr));
                 sm.setUserShadow(user, shaStr);
             } else {
-                throw new ProtocolException("Unexpected shadow stage");
+                throw new ProtocolException("Unexpected shadow");
             }
             worker.onAuthorized();
             reportCodecFormat(worker);
-        }
-
-        private void reportCodecFormat(StreamWorker worker) {
-            ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::setUpMediaCodec);
-
-            byte[] csdData = ifCameraInitialized(DEFAULT_CAMERA_ID,
-                    camera -> getCodecSpecificDataArray(camera.getCsdBuffers()), null);
-            if (csdData != null && csdData.length > 0) {
-                worker.notifyClient(FORMAT, csdData);
-            }
         }
 
         @Override
@@ -693,6 +677,26 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     };
+
+    private void reportAuthorizationGranted(StreamWorker worker, String user, SettingsManager sm) {
+        String sha = sm.getUserShadow(user);
+        if (sha != null) {
+            worker.onUserKnown(sha);
+            reportCodecFormat(worker);
+        } else {
+            worker.onAuthorized();
+        }
+    }
+
+    private void reportCodecFormat(StreamWorker worker) {
+        ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::setUpMediaCodec);
+
+        byte[] csdData = ifCameraInitialized(DEFAULT_CAMERA_ID,
+                camera -> getCodecSpecificDataArray(camera.getCsdBuffers()), null);
+        if (csdData != null && csdData.length > 0) {
+            worker.notifyClient(FORMAT, csdData);
+        }
+    }
 
     private void setupCamera() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M

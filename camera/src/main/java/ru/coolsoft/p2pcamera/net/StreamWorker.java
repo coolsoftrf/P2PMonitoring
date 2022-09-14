@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StreamCorruptedException;
+import java.net.ProtocolException;
 import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -242,7 +243,7 @@ public class StreamWorker extends Thread {
                             break loop;
                     }
                 }
-            } catch (StreamCorruptedException e) {
+            } catch (StreamCorruptedException | ProtocolException e) {
                 listener.onError(this, CLIENT_STREAMING_ERROR, e);
             } catch (EOFException e) {
                 listener.onError(this, CONNECTION_CLOSED, e);

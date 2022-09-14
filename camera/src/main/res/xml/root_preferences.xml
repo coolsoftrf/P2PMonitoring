@@ -28,9 +28,13 @@
             app:key="@string/pref_key_white_list"
             app:persistent="false"
             app:summary="@string/message_remove_from_list"
-            app:title="@string/white_list">
+            app:title="@string/white_list" />
 
-        </ListPreference>
+        <ListPreference
+            app:key="@string/pref_key_onetimers"
+            app:persistent="false"
+            app:summary="@string/message_remove_from_list"
+            app:title="@string/onetimers" />
 
     </PreferenceCategory>
 
