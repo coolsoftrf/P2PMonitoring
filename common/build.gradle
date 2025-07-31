@@ -1,14 +1,13 @@
 plugins {
-    id 'com.android.library'
+    alias(libs.plugins.android.library)
 }
 
 android {
-    compileSdkVersion 32
-    buildToolsVersion "32.1.0-rc1"
+    namespace 'ru.coolsoft.common'
+    compileSdk 36
 
     defaultConfig {
-        minSdkVersion 22
-        targetSdkVersion 32
+        minSdk 24
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -27,17 +26,14 @@ android {
 }
 
 dependencies {
-    implementation 'androidx.activity:activity:1.5.1'
-    implementation 'androidx.fragment:fragment:1.5.2'
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.5.1'
-    compileOnly project(':annotations')
-    annotationProcessor project(':annotations')
-    testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.3'
 
-    implementation 'androidx.annotation:annotation:1.4.0'
+    implementation libs.appcompat
+    implementation libs.material
 
-    //ToDo: Fix Bali plugin not to require this dependency for @ById annotations processing
-    //noinspection AnnotationProcessorOnCompilePath
-    compileOnly 'org.projectlombok:lombok:1.18.24'
+    compileOnly files('../libs/lombok-1.18.39-ext.jar')
+    annotationProcessor files('../libs/lombok-1.18.39-ext.jar')
+
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
 }

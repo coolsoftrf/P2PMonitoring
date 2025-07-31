@@ -30,7 +30,7 @@ public class Protocol {
                     dataLen = 0;
                 }
 
-                StreamId streamId = StreamId.byId(msg.arg1);
+                StreamId streamId = StreamId.lookup(msg.arg1);
                 OutputStream out = outputStreamSupplier.get(streamId);
                 out.write(msg.arg1);
                 if (msg.arg2 != UNUSED) {

@@ -1,8 +1,14 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
-        google()
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
         mavenCentral()
+        gradlePluginPortal()
     }
 }
 dependencyResolutionManagement {
@@ -17,4 +23,3 @@ rootProject.name = "P2P Monitoring"
 include ':camera'
 include ':common'
 include ':monitor'
-include ':annotations'

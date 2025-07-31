@@ -1,0 +1,6 @@
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    
+    "java.jdt.ls.lombokSupport.enabled": false,
+    "java.jdt.ls.vmargs": "-javaagent:lib\\lombok-1.18.39-ext.jar"
+}

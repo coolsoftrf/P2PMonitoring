@@ -32,7 +32,6 @@ import android.media.MediaCodec;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.RouteInfo;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -90,7 +89,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String LOG_TAG = "P2PCamera";
     private static final int REQUEST_CODE_CAMERA = 1;
 
-    private final String DEFAULT_CAMERA_ID = "0";
+    private int mCameraIndex = 0;
     //ToDo: move clients to service layer
     private final List<ClientInfo> clients = new ArrayList<>();
 
@@ -271,9 +270,9 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture texture, int width, int height) {
             Log.d(LOG_TAG, "texture available");
-            ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+            ifCameraInitialized(getCurrentCameraId(), camera -> {
                 try {
-                    cameraCharacteristics = mCameraManager.getCameraCharacteristics(camera.mCameraID);
+                    cameraCharacteristics = getCameraManager().getCameraCharacteristics(camera.mCameraID);
                 } catch (CameraAccessException e) {
                     Log.e(LOG_TAG, "failed to obtain characteristics during texture configuration", e);
                     return;
@@ -304,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
             Log.d(LOG_TAG, "texture destroyed");
-            ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+            ifCameraInitialized(getCurrentCameraId(), camera -> {
                 if (camera.isOpen()) {
                     camera.removeSurface((Surface) mTextureView.getTag(R.id.TAG_KEY_SURFACE));
                 }
@@ -353,7 +352,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+        ifCameraInitialized(getCurrentCameraId(), camera -> {
             if (!camera.isOpen() && mTextureView.isAvailable()) {
                 //camera got disabled while running in background - restart session
                 camera.openCamera();
@@ -374,7 +373,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         streamingServer.stopServer();
 
-        ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+        ifCameraInitialized(getCurrentCameraId(), camera -> {
             if (camera.isOpen()) {
                 camera.closeCamera();
             }
@@ -421,17 +420,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initCamera() {
-        mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        CameraManager cm = getCameraManager();
         try {
-            if (!mCameraManager.getCameraCharacteristics(DEFAULT_CAMERA_ID).get(FLASH_INFO_AVAILABLE)) {
+            if (!cm.getCameraCharacteristics(getCameraId(mCameraIndex)).get(FLASH_INFO_AVAILABLE)) {
                 onTorchUnavailable();
             }
         } catch (CameraAccessException e) {
-            Log.e(LOG_TAG, "failed to obtain characteristics during camera initialization", e);
+            Log.e(LOG_TAG, "failed to obtain characteristics during initialization of camera index " + mCameraIndex, e);
         }
 
         try {
-            final String[] cameras = mCameraManager.getCameraIdList();
+            final String[] cameras = cm.getCameraIdList();
             mCameras = new HashMap<>(cameras.length);
 
             for (String cameraID : cameras) {
@@ -459,9 +458,8 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void openCamera(String cameraId, CameraDevice.StateCallback cameraCallback) throws CameraAccessException {
-            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.M ||
-                    checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                mCameraManager.openCamera(cameraId, cameraCallback, mBackgroundHandler);
+            if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                getCameraManager().openCamera(cameraId, cameraCallback, mBackgroundHandler);
             }
         }
 
@@ -530,7 +528,7 @@ public class MainActivity extends AppCompatActivity {
     private final EventListener eventListener = new EventListener() {
         @Override
         public void onGatewaysDiscovered(Map<InetAddress, GatewayDevice> gateways) {
-            StringBuilder msg = new StringBuilder(getString(R.string.gateways_discovered, gateways.entrySet().size()));
+            StringBuilder msg = new StringBuilder(getString(R.string.gateways_discovered, gateways.size()));
             for (Map.Entry<InetAddress, GatewayDevice> entry : gateways.entrySet()) {
                 msg.append(MessageFormat.format("\r\n@{0}: {1}", entry.getKey(), entry.getValue().getURLBase()));
             }
@@ -624,7 +622,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onClientDisconnected(StreamWorker worker) {
             clients.remove(new ClientInfo(worker));
-            ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+            ifCameraInitialized(getCurrentCameraId(), camera -> {
                 if (clients.isEmpty()) {
                     camera.stopMediaStreaming();
                 }
@@ -635,7 +633,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onToggleFlashlight() {
             if (torchAvailable) {
-                ifCameraInitialized(DEFAULT_CAMERA_ID, camera -> {
+                ifCameraInitialized(getCurrentCameraId(), camera -> {
                     camera.setFlashMode(!torchMode);
                     onTorchModeChanged(!torchMode);
                 });
@@ -652,8 +650,8 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void notifyAvailability() {
-            ByteBuffer buf = getCameraIdByteBuffer(DEFAULT_CAMERA_ID);
-            buf.put(ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::isOpen, false)
+            ByteBuffer buf = getCameraIdByteBuffer(getCurrentCameraId());
+            buf.put(ifCameraInitialized(getCurrentCameraId(), CameraService::isOpen, false)
                     ? CAMERA_AVAILABLE
                     : CAMERA_UNAVAILABLE);
             streamingServer.notifyClients(AVAILABILITY, buf.array());
@@ -689,9 +687,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void reportCodecFormat(StreamWorker worker) {
-        ifCameraInitialized(DEFAULT_CAMERA_ID, CameraService::setUpMediaCodec);
+        ifCameraInitialized(getCurrentCameraId(), CameraService::setUpMediaCodec);
 
-        byte[] csdData = ifCameraInitialized(DEFAULT_CAMERA_ID,
+        byte[] csdData = ifCameraInitialized(getCurrentCameraId(),
                 camera -> getCodecSpecificDataArray(camera.getCsdBuffers()), null);
         if (csdData != null && csdData.length > 0) {
             worker.notifyClient(FORMAT, csdData);
@@ -699,12 +697,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupCamera() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                && checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.CAMERA}, REQUEST_CODE_CAMERA);
         } else {
             initCamera();
         }
+    }
+
+    private String getCurrentCameraId() {
+        return getCameraId(mCameraIndex);
+    }
+    
+    private String getCameraId(int cameraIndex){
+        try {
+            return getCameraManager().getCameraIdList()[cameraIndex];
+        } catch (CameraAccessException e) {
+            throw new IllegalStateException("Error retrieving camera list");
+        }
+    }
+    
+    private CameraManager getCameraManager(){
+        if(mCameraManager == null){
+            mCameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        }
+        return mCameraManager;
     }
 
     private void startBackgroundThread() {

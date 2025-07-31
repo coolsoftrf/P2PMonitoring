@@ -1,18 +1,15 @@
 # P2PMonitoring
 This project is an attempt to create a peer-to-peer video monitoring system
 for Android devices primarily and any other clients implementing the protocol in the future.
-Any camera enabled Android device may run as a server (p2pcamera app)
-to accept connections from clients (p2pmonitor app for Android) and stream media data to them.
+Any camera enabled Android device may run as a server (`p2pcamera` app)
+to accept connections from clients (`p2pmonitor` app for Android) and stream media data to them.
 Protocol implies a possibility for clients to control server part requesting available features
 and managing the camera parameters as if it was local.
 
-##Source code and building
+## Source code and building
 The project contains compile-time annotations.
-While source code gets built without errors, you may find unresolved references during source code overview.
-In order to eliminate such faulty error highlights consider installing
-[bali-intellij-plugin](https://github.com/coolsoftrf/bali-intellij-plugin)
-(an evolution of [lombok-intellij-plugin](https://github.com/mplushnikov/lombok-intellij-plugin) 
-which supports Enum annotations used in this project)
+While source code gets built without errors, you may find unresolved method references during source code overview in Android Studio. VS Code Support for these annotations is integrated into supplied `lombok-ext.jar`. Check GIT repo for the source code of the [lombok extension library](https://github.com/coolsoftrf/lombok-ext)
+(an evolution of [project lombok](https://github.com/projectlombok/lombok)
 
 # Project plan and progress
 ## Phase #0 - «POC»
@@ -40,6 +37,7 @@ which supports Enum annotations used in this project)
 - [ ] Server: periodic port mapping check and refresh
 - [x] Server: fix image freezes on 1st connection / last disconnection on API 25 devices
 - [x] Server: fix image turns 90 deg CCW on 1st connection / last disconnection on API 25 devices
+- [ ] Client: fix video hangup with a corrupted frame displayed on emulator
 - [ ] Client: fix image out of sync on slow devices
 - [ ] Client: add media stream watchdog and connection revival
 ## Phase #2 - «Security»
@@ -69,9 +67,14 @@ which supports Enum annotations used in this project)
 ## Phase #6 - «Scaling»
 - [ ] Server: work with several cameras to serve different sources to different clients independently
 - [ ] Server: per-camera client statistics
+
 ---
+
 ## Nice to have features
-- [ ] Wrap camera server into foreground service
 - [ ] Protocol: audio streaming
 - [ ] Server: choose interface (IP address) to bind to
-- [ ] Server: choose gateway (external IP address) to forward from 
+- [ ] Server: choose gateway (external IP address) to forward from
+
+# Technical
+- [X] Migrate to lombok extension library
+- [ ] Wrap camera server into foreground service

@@ -163,7 +163,7 @@ public class StreamingClient extends Thread {
             loop:
             while (true) {
                 int streamId = (cin != null ? cin : in).read();
-                switch (StreamId.byId(streamId)) {
+                switch (StreamId.lookup(streamId)) {
                     case AUTHENTICATION:
                         int result = in.read();
                         switch (result) {
@@ -194,7 +194,7 @@ public class StreamingClient extends Thread {
 
                     case CONTROL: {
                         int cmdId = cin.read();
-                        Command cmd = Command.byId(cmdId);
+                        Command cmd = Command.lookup(cmdId);
                         byte[] data;
                         switch (cmd) {
                             case UNDEFINED:

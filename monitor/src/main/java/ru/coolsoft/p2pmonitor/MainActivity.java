@@ -249,7 +249,7 @@ public class MainActivity extends AppCompatActivity {
                     case FLASHLIGHT:
                         if (checkDataLen(command, null, 1, data)) {
                             int txt;
-                            Flashlight mode = Flashlight.byId(data[0]);
+                            Flashlight mode = Flashlight.lookup(data[0]);
                             switch (mode) {
                                 case OFF:
                                     txt = R.string.torch_off_button;
@@ -651,7 +651,7 @@ public class MainActivity extends AppCompatActivity {
     public void onConnectClicked(View view) {
         String address = mAddressEdit.getText().toString().trim();
         if (client == null) {
-            if (address.length() > 0) {
+            if (!address.isEmpty()) {
                 setConnectionControlsVisibility(false);
                 client = new StreamingClient(address, eventListener);
                 client.start();

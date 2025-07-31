@@ -73,7 +73,7 @@ public class StreamWorker extends Thread {
     private AuthStage authStage = AuthStage.User;
     private byte[] sha;
 
-    public StreamWorker(Socket socket, WorkerEventListener workerEventListener, EventListener eventListener) {
+    StreamWorker(Socket socket, WorkerEventListener workerEventListener, EventListener eventListener) {
         this.socket = socket;
         listener = eventListener;
         workerListener = workerEventListener;
@@ -226,7 +226,7 @@ public class StreamWorker extends Thread {
                 listener.onClientConnected(this);
                 loop:
                 while (running) {
-                    StreamId key = StreamId.byId((cin != null ? cin : in).read());
+                    StreamId key = StreamId.lookup((cin != null ? cin : in).read());
                     switch (key) {
                         case AUTHENTICATION:
                             if (!processAuth()) {
@@ -289,7 +289,7 @@ public class StreamWorker extends Thread {
 
     private void processCommand() throws IOException {
         int cmdId = cin.read();
-        Command cmd = Command.byId(cmdId);
+        Command cmd = Command.lookup(cmdId);
         readData(cin);
         switch (cmd) {
             case FLASHLIGHT:
