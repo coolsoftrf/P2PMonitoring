@@ -43,7 +43,7 @@ import javax.crypto.CipherInputStream;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import ru.coolsoft.common.BlockCipherOutputStream;
+import ru.coolsoft.common.CipherBlockSizeAwareOutputStream;
 import ru.coolsoft.common.Constants;
 import ru.coolsoft.common.enums.Command;
 import ru.coolsoft.common.enums.StreamId;
@@ -60,7 +60,7 @@ public class StreamWorker extends Thread {
     private InputStream in;
     private OutputStream out;
     private CipherInputStream cin;
-    private BlockCipherOutputStream cout;
+    private CipherBlockSizeAwareOutputStream cout;
     private boolean running;
 
     private enum AuthStage {
@@ -185,7 +185,7 @@ public class StreamWorker extends Thread {
 
             Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
-            cout = new BlockCipherOutputStream(out, cipher);
+            cout = new CipherBlockSizeAwareOutputStream(out, cipher);
 
             cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
             cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);

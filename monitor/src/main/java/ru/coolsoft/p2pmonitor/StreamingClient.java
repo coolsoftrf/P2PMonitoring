@@ -70,7 +70,7 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
-import ru.coolsoft.common.BlockCipherOutputStream;
+import ru.coolsoft.common.CipherBlockSizeAwareOutputStream;
 import ru.coolsoft.common.Protocol;
 import ru.coolsoft.common.enums.Command;
 import ru.coolsoft.common.enums.StreamId;
@@ -88,7 +88,7 @@ public class StreamingClient extends Thread {
     private InputStream in;
     private CipherInputStream cin;
     private OutputStream out;
-    private BlockCipherOutputStream cout;
+    private CipherBlockSizeAwareOutputStream cout;
 
     private byte[] mSha;
 
@@ -242,7 +242,7 @@ public class StreamingClient extends Thread {
 
         cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
         cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
-        cout = new BlockCipherOutputStream(out, cipher);
+        cout = new CipherBlockSizeAwareOutputStream(out, cipher);
     }
 
     private final boolean[] insecureConnectionDecisionContainer = new boolean[1];

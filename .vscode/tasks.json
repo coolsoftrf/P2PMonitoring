@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "gradle",
+			"id": "P2PMonitoring_assembleDebug",
+			"script": "assembleDebug",
+			"description": "Assembles main output for variant debug",
+			"group": "other",
+			"project": "P2P Monitoring",
+			"buildFile": "C:\\Users\\Prestige\\AndroidStudioProjects\\P2PMonitoring\\build.gradle",
+			"rootProject": "P2P Monitoring",
+			"projectFolder": "c:\\Users\\Prestige\\AndroidStudioProjects\\P2PMonitoring",
+			"workspaceFolder": "c:\\Users\\Prestige\\AndroidStudioProjects\\P2PMonitoring",
+			"args": "",
+			"javaDebug": false,
+			"problemMatcher": [
+				"$gradle"
+			],
+			"label": "gradle: assembleDebug"
+		}
+	]
+}

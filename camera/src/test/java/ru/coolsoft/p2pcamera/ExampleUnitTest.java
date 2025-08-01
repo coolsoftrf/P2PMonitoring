@@ -23,7 +23,7 @@ import javax.crypto.CipherInputStream;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import ru.coolsoft.common.BlockCipherOutputStream;
+import ru.coolsoft.common.CipherBlockSizeAwareOutputStream;
 
 /**
  * Example local unit test, which will execute on the development machine (host).
@@ -49,7 +49,7 @@ public class ExampleUnitTest {
         SecretKeySpec secretKeySpec = new SecretKeySpec(sha, CIPHER_ALGORITHM);
         IvParameterSpec paramSpec = new IvParameterSpec(CIPHER_IV.getBytes(Charset.forName(CIPHER_IV_CHARSET)));
 
-        BlockCipherOutputStream cout;
+        CipherBlockSizeAwareOutputStream cout;
         PipedInputStream in = new PipedInputStream(1024);
         PipedOutputStream out;
         try {
@@ -61,16 +61,15 @@ public class ExampleUnitTest {
         try {
             Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
             cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
-            cout = new BlockCipherOutputStream(out, cipher);
+            cout = new CipherBlockSizeAwareOutputStream(out, cipher);
         } catch (GeneralSecurityException e) {
             fail("cout");
             return;
         }
 
         CipherInputStream cin;
-        Cipher inCipher;
         try {
-            inCipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+            Cipher inCipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
             inCipher.init(Cipher.DECRYPT_MODE, secretKeySpec, paramSpec);
             cin = new CipherInputStream(in, inCipher);
         } catch (GeneralSecurityException e) {
@@ -88,7 +87,7 @@ public class ExampleUnitTest {
             }
 
             byte[] dataOut = new byte[dataIn.length];
-            int pos = 1;
+            int pos = 0;
             while (pos < dataIn.length) {
                 try {
                     //skip leading paddings
@@ -99,7 +98,7 @@ public class ExampleUnitTest {
                         fail("EOF while skipping paddings, iteration:" + i + ", pos: " + pos);
                         return;
                     }
-                    dataOut[0] = ibyte;
+                    dataOut[pos++] = ibyte;
 
                     int read = cin.read(dataOut, pos, dataIn.length - pos);
                     if (read == -1) {

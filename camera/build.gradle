@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'ru.coolsoft.p2pcamera'
-    compileSdk 36
+    compileSdk 35
 
     defaultConfig {
         applicationId "ru.coolsoft.p2pcamera"
         minSdk 24
-        targetSdk 36
+        targetSdk 35
         versionCode 4
         versionName "0.3.1"
 
@@ -43,3 +43,20 @@ dependencies {
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
 }
+
+//VS Code Workaround
+/* 
+sourceSets{
+    main{
+        java {
+            srcDirs 'src/main/java'
+        }
+    }
+    
+    test {
+        java {
+            srcDirs 'src/test/java'
+        }
+    }
+}
+ */

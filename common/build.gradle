@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace 'ru.coolsoft.common'
-    compileSdk 36
+    compileSdk 35
 
     defaultConfig {
         minSdk 24
@@ -30,10 +30,27 @@ dependencies {
     implementation libs.appcompat
     implementation libs.material
 
-    compileOnly files('../libs/lombok-1.18.39-ext.jar')
-    annotationProcessor files('../libs/lombok-1.18.39-ext.jar')
+    compileOnly name:'lombok-1.18.39-ext'
+    annotationProcessor name:'lombok-1.18.39-ext'
 
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
 }
+
+// VS Code Workaround
+/* 
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+sourceSets{
+    main {
+        java {
+            srcDirs 'src/main/java'
+        }
+    }
+}
+ */

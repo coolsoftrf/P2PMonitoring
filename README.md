@@ -1,4 +1,4 @@
-# P2PMonitoring
+# P2P Monitoring
 This project is an attempt to create a peer-to-peer video monitoring system
 for Android devices primarily and any other clients implementing the protocol in the future.
 Any camera enabled Android device may run as a server (`p2pcamera` app)
@@ -29,6 +29,7 @@ While source code gets built without errors, you may find unresolved method refe
 - [ ] Remaster enums via `@IntDef` or static `byte`->value maps
 - [x] Refactor `Message` acquisition via `obtain()`
 - [ ] Create unit tests
+- [ ] Create heavy load tests
 - [x] Client: control frame rotation
 - [ ] Protocol: capture (high-res) photo on the fly
 - [x] Server: stop encoder when last client disconnects
@@ -75,6 +76,6 @@ While source code gets built without errors, you may find unresolved method refe
 - [ ] Server: choose interface (IP address) to bind to
 - [ ] Server: choose gateway (external IP address) to forward from
 
-# Technical
+## Technical
 - [X] Migrate to lombok extension library
 - [ ] Wrap camera server into foreground service

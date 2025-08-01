@@ -1,6 +1,5 @@
 package ru.coolsoft.common;
 
-import static ru.coolsoft.common.Constants.CIPHER_BLOCK_SIZE;
 import static ru.coolsoft.common.enums.StreamId.PADDING;
 
 import java.io.FilterOutputStream;
@@ -12,17 +11,19 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 
-public class BlockCipherOutputStream extends FilterOutputStream {
+public class CipherBlockSizeAwareOutputStream extends FilterOutputStream {
 
     private final Cipher cipher;
+    private final int cipherBlockSize;
     private final byte[] ibuffer = new byte[1];
     private byte[] obuffer;
     private boolean closed;
     private int written;
 
-    public BlockCipherOutputStream(OutputStream os, Cipher c) {
+    public CipherBlockSizeAwareOutputStream(OutputStream os, Cipher c) {
         super(os);
         cipher = c;
+        cipherBlockSize = c.getBlockSize();
     }
 
     @Override
@@ -41,14 +42,14 @@ public class BlockCipherOutputStream extends FilterOutputStream {
         obuffer = cipher.update(b, off, len);
         if (obuffer != null) {
             out.write(obuffer);
+            written = (written + len) % cipherBlockSize;
         }
-        written = (written + len) % CIPHER_BLOCK_SIZE;
         obuffer = null;
     }
 
     @Override
     public void flush() throws IOException {
-        byte[] padding = new byte[CIPHER_BLOCK_SIZE - written];
+        byte[] padding = new byte[(cipherBlockSize - written) % cipherBlockSize + cipherBlockSize];
         Arrays.fill(padding, (byte) PADDING.id);
         write(padding, 0, padding.length);
         out.flush();
