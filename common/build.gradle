@@ -1,3 +1,5 @@
+import javax.inject.Inject
+
 plugins {
     alias(libs.plugins.android.library)
 }
@@ -25,17 +27,56 @@ android {
     }
 }
 
+ext {
+    lombok_version = "1.18.39"
+    dirsToDelombok = ["src/main/java/ru/coolsoft/common/enums"] as String[]
+}
+
 dependencies {
 
     implementation libs.appcompat
     implementation libs.material
 
-    compileOnly name:'lombok-1.18.39-ext'
-    annotationProcessor name:'lombok-1.18.39-ext'
+    compileOnly name: "lombok-${project.ext.lombok_version}-ext"
+    annotationProcessor name: "lombok-${project.ext.lombok_version}-ext"
 
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
+}
+
+// lombok workaround
+interface InjectedExecOps {
+    @Inject
+    ExecOperations getExecOps()
+}
+
+tasks.register('delombok') {
+    group = "lombok"
+
+    dirsToDelombok.each {path->
+        def ieops = objects.newInstance(InjectedExecOps)
+        ieops.execOps.exec {
+            commandLine "java", "-jar", "../libs/lombok-${lombok_version}-ext.jar", "delombok", path, "-d", "${path}_delombok"
+        }
+
+        file(path).listFiles().each {
+            it.renameTo(file("$path/${it.name}.lombok"))
+        }
+    }
+}
+
+tasks.register('undelombok') {
+    group = "lombok"
+
+    dirsToDelombok.each {path->
+        file(path).listFiles().each {
+            if (it.name.endsWith(".lombok")) {
+                it.renameTo(file("$path/${it.name.with {it.substring(0, it.lastIndexOf(".lombok"))}}"))
+            }
+        }
+        delete(file("${path}_delombok"))
+    }
 }
 
 // VS Code Workaround
@@ -53,4 +94,4 @@ sourceSets{
         }
     }
 }
- */
+*/
