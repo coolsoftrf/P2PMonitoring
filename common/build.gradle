@@ -54,7 +54,7 @@ interface InjectedExecOps {
 tasks.register('delombok') {
     group = "lombok"
 
-    dirsToDelombok.each {path->
+    dirsToDelombok.each { path ->
         def ieops = objects.newInstance(InjectedExecOps)
         ieops.execOps.exec {
             commandLine "java", "-jar", "../libs/lombok-${lombok_version}-ext.jar", "delombok", path, "-d", "${path}_delombok"
@@ -69,10 +69,10 @@ tasks.register('delombok') {
 tasks.register('undelombok') {
     group = "lombok"
 
-    dirsToDelombok.each {path->
+    dirsToDelombok.each { path ->
         file(path).listFiles().each {
             if (it.name.endsWith(".lombok")) {
-                it.renameTo(file("$path/${it.name.with {it.substring(0, it.lastIndexOf(".lombok"))}}"))
+                it.renameTo(file("$path/${it.name.with { it.substring(0, it.lastIndexOf(".lombok")) }}"))
             }
         }
         delete(file("${path}_delombok"))

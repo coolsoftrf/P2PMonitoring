@@ -11,7 +11,16 @@
             "appSrcRoot": "${workspaceRoot}/camera/src/main",
             "apkFile": "${workspaceRoot}/camera/build/outputs/apk/debug/camera-debug.apk",
             "adbPort": 5037,
-            "preLaunchTask": "gradle: assembleDebug"
+            "preLaunchTask": "gradle: camera:assembleDebug"
+        },
+        {
+            "type": "android",
+            "request": "launch",
+            "name": "Android launch: monitor",
+            "appSrcRoot": "${workspaceRoot}/monitor/src/main",
+            "apkFile": "${workspaceRoot}/monitor/build/outputs/apk/debug/monitor-debug.apk",
+            "adbPort": 5037,
+            "preLaunchTask": "gradle: monitor:assembleDebug"
         },
         {
             "type": "android",

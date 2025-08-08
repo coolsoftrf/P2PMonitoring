@@ -40,7 +40,7 @@
                 android:layout_height="wrap_content"
                 android:hint="@string/ip_address_hint"
                 android:importantForAutofill="no"
-                android:inputType="phone" />
+                android:inputType="text" />
 
             <Button
                 android:id="@+id/connect_button"

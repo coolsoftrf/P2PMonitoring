@@ -8,8 +8,17 @@ and managing the camera parameters as if it was local.
 
 ## Source code and building
 The project contains compile-time annotations.
-While source code gets built without errors, you may find unresolved method references during source code overview in Android Studio. VS Code Support for these annotations is integrated into supplied `lombok-ext.jar`. Check GIT repo for the source code of the [lombok extension library](https://github.com/coolsoftrf/lombok-ext)
-(an evolution of [project lombok](https://github.com/projectlombok/lombok)
+While source code gets built without errors, you may find unresolved method references during source code overview in Android Studio. VS Code Support for these annotations is integrated into supplied `lombok-ext.jar` (see `"java.jdt.ls.vmargs": "-javaagent:libs\\lombok-1.18.39-ext.jar"` in `.vscode\settings`).
+<br><br>
+In order to enable support of these annotations in Android Studio:
+- go to Settings -> Plugins
+- uninstall Lombok plugin if installed
+- install supplied `intellij.lombok-ext.jar`)
+
+GIT repos:
+- compileOnly and annotationProcessor library (includes javaagent for supporting IDEs): [lombok extension library](https://github.com/coolsoftrf/lombok-ext)
+(an evolution of [project lombok](https://github.com/projectlombok/lombok))
+- IntelliJ IDEA plugin: [intellij-community-for-lombok](https://github.com/coolsoftrf/intellij-community-for-lombok)
 
 # Project plan and progress
 ## Phase #0 - «POC»

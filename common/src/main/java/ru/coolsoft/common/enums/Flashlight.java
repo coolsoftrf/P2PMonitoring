@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Lookup;
 
 @AllArgsConstructor
-@Lookup(field = "mode", constructorArgumentOrdinal = 0, defaultValue = "UNKNOWN")
+@Lookup(field = "mode", defaultValue = "UNKNOWN")
 public enum Flashlight {
     OFF(0),
     ON(1),

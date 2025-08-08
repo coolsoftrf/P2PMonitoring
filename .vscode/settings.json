@@ -2,7 +2,7 @@
     "java.configuration.updateBuildConfiguration": "interactive",
     // "java.jdt.ls.java.home": "C:\\Soft\\dev\\Java",
     // "java.import.gradle.java.home": "c:\\Users\\Prestige\\.gradle\\jdks\\eclipse_adoptium-21-amd64-windows\\jdk-21.0.5+11",
-    //"java.import.gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
+    "java.import.gradle.java.home": "C:\\Program Files\\Android\\Android Studio\\jbr",
 /*
     "java.import.gradle.enabled": false,
     "java.import.gradle.wrapper.enabled": false,

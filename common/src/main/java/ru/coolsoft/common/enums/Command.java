@@ -5,7 +5,7 @@ import lombok.Lookup;
 import ru.coolsoft.common.Protocol;
 
 @AllArgsConstructor
-@Lookup(field = "id", constructorArgumentOrdinal = 0, defaultValue = "UNDEFINED")
+@Lookup(field = "id", defaultValue = "UNDEFINED")
 public enum Command {
     FLASHLIGHT(0),
     CAPS(1),
